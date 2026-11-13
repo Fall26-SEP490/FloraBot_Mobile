@@ -2,6 +2,53 @@
 
 Ứng dụng Android/iOS cho TECHNICIAN, SELLER_STAFF, SELLER và CUSTOMER đặt trước. Giao diện tiếng Việt, gọi API thật. Kế hoạch chức năng, quyền và phần còn phụ thuộc hệ thống: [docs/MOBILE_FUNCTIONAL_PLAN.md](docs/MOBILE_FUNCTIONAL_PLAN.md).
 
+## Lấy code về và chạy lần đầu
+
+Cài Git, Flutter SDK, Chrome để xem giao diện Web và Android Studio kèm Android SDK để chạy Android. Bộ dependency hiện tại yêu cầu Flutter >=3.44 và Dart >=3.12 <4. Kiểm tra môi trường bằng `flutter doctor`.
+
+Code Mobile đang ở nhánh `feature/flutter-role-workspaces`. Mở terminal tại thư mục muốn lưu dự án rồi chạy:
+
+```bash
+git clone -b feature/flutter-role-workspaces https://github.com/Fall26-SEP490/FloraBot_Mobile.git
+cd FloraBot_Mobile
+flutter pub get
+flutter run -d chrome
+```
+
+Lệnh cuối mở giao diện trên Chrome. Repository riêng tư yêu cầu tài khoản GitHub đã được cấp quyền truy cập.
+
+Để chạy trên điện thoại Android, cắm cáp USB, bật Developer options và USB debugging, chấp nhận kết nối trên điện thoại rồi chạy:
+
+```bash
+flutter devices
+flutter run -d <device-id>
+```
+
+Thay `<device-id>` bằng ID thiết bị được liệt kê, không gõ nguyên dấu `< >`. Có thể dùng ID Android Emulator đang chạy thay cho điện thoại thật.
+
+Các lệnh trên dùng API mặc định `https://api.florabot.site`. Giao diện có thể mở trước; đăng nhập và chức năng dùng dữ liệu thật cần Backend có API Mobile đã được triển khai. Xem phần Chuẩn bị Backend bên dưới.
+
+## Tiếp tục phát triển cùng nhóm
+
+Tạo nhánh riêng trước khi sửa code:
+
+```bash
+git switch -c feature/mobile-ten-chuc-nang
+```
+
+Sau khi hoàn thành, kiểm tra, commit các file đã sửa và push nhánh đó:
+
+```bash
+flutter analyze
+flutter test
+git status
+git add <cac-file-da-sua>
+git commit -m "feat(mobile): mo ta chuc nang"
+git push -u origin feature/mobile-ten-chuc-nang
+```
+
+Thay tên nhánh và `<cac-file-da-sua>` bằng giá trị thực tế; không commit mật khẩu, token, khóa ký hoặc cấu hình máy cá nhân. Tạo Pull Request để nhóm review và thống nhất nhánh đích trước khi merge.
+
 ## Hình ảnh thương hiệu
 
 Ảnh trong `assets/images/` được dùng lại từ `FloraBot_FE/apps/web/public/images/generated/`: `florabot-hero.webp` cho màn hình chào/đăng nhập, `florabot-pattern.webp` cho nền trang đăng nhập, `florabot-step-stock.webp` cho trang tổng quan Seller/Staff và `florabot-process.png` cho thẻ hành trình hoa. App đóng gói ảnh cục bộ, không cần tải ảnh thương hiệu qua mạng. Các widget dùng chung nằm ở `lib/ui/brand.dart`.
