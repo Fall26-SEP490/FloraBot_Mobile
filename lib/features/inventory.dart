@@ -82,29 +82,130 @@ class SlotsPage extends StatelessWidget {
   final Session session;
   final Json kiosk;
   @override
-  Widget build(BuildContext context) => ApiListPage(
-    api: api,
-    path: '/api/me/kiosks/${kiosk['id']}/slots',
-    title: valueOf(kiosk, 'name'),
-    subtitle: valueOf(kiosk, 'address'),
-    item: (context, row, state) => RecordCard(
-      title:
-          'Ô ${row['slotCode']} • ${row['zone'] == 'PREORDER' ? 'Đặt trước' : 'Walk-in'}',
-      subtitle: row['bouquetId'] == null
-          ? 'Chưa có bó hoa được ghi nhận'
-          : 'Bó: ${row['qrCode'] ?? row['bouquetId']}',
-      status: row['status'],
-      onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => SlotDetail(api, session, kiosk, row),
-          ),
-        );
-        await state.reload();
-      },
-    ),
+  Widget build(BuildContext context) => ResourceView(
+    resourceKey: kiosk['id'],
+    load: () => api.get('/api/me/kiosks/${kiosk['id']}/slots'),
+    builder: (context, data, state) {
+      final slots = {for (final slot in itemsOf(data)) slot['id']: slot}.values;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PageTitle(valueOf(kiosk, 'name'), valueOf(kiosk, 'address')),
+          const SizedBox(height: 12),
+          if (slots.isEmpty)
+            const InfoBox('Kiosk này chưa có ô tủ.')
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const gap = 12.0;
+                final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+                final twoColumns = constraints.maxWidth >= 296 * scale;
+                final width = twoColumns
+                    ? (constraints.maxWidth - gap) / 2
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final slot in slots)
+                      SizedBox(
+                        width: width,
+                        child: _CabinetSlotCard(
+                          slot,
+                          onTap: () async {
+                            await Navigator.push<void>(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    SlotDetail(api, session, kiosk, slot),
+                              ),
+                            );
+                            await state.reload();
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+        ],
+      );
+    },
   );
+}
+
+class _CabinetSlotCard extends StatelessWidget {
+  const _CabinetSlotCard(this.slot, {required this.onTap});
+
+  final Json slot;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = switch (slot['zone']) {
+      'WALK_IN' => 'Walk-in',
+      'PREORDER' => 'Đặt trước',
+      _ => 'Chưa phân loại',
+    };
+    final bouquet = slot['bouquetId'] == null
+        ? 'Chưa có bó hoa'
+        : 'Bó: ${slot['qrCode'] ?? slot['bouquetId']}';
+    final status = slot['status'];
+    final statusColor = switch (status) {
+      'FAULT' => const Color(0xFFFCE9E4),
+      'LOCKED' || 'HELD' || 'PENDING_REMOVAL' => const Color(0xFFFFF2D7),
+      'RENTED_EMPTY' => const Color(0xFFE9F1F7),
+      _ => const Color(0xFFE9F1E8),
+    };
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Ô ${valueOf(slot, 'slotCode')}',
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, size: 20),
+                ],
+              ),
+              Text(type, style: textTheme.labelMedium?.copyWith(color: forest)),
+              const SizedBox(height: 8),
+              Text(
+                bouquet,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF617568),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(statusText(status), style: textTheme.labelMedium),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class SlotDetail extends StatefulWidget {
@@ -133,7 +234,9 @@ class _SlotDetailState extends State<SlotDetail> {
     Json? current;
     if (slot['sensorEnabled'] == true && slot['zone'] == 'WALK_IN') {
       try {
-        current = objectOf(await widget.api.get('$base/active'));
+        final activeSession = await widget.api.get('$base/active');
+        // The API returns 204 when the slot has no active session.
+        if (activeSession != null) current = objectOf(activeSession);
       } on ApiError catch (e) {
         if (e.status != 404) rethrow;
       }
@@ -210,6 +313,15 @@ class _SlotDetailState extends State<SlotDetail> {
       final products = (payload['products'] as List).map(objectOf).toList();
       final actions = (current?['availableActions'] as List? ?? [])
           .cast<String>();
+      final emptySlot = slot['status'] == 'RENTED_EMPTY';
+      final stockedSlot = [
+        'STOCKED',
+        'PENDING_REMOVAL',
+      ].contains(slot['status']);
+      final walkIn = slot['zone'] == 'WALK_IN';
+      final ready = slot['sensorReady'] == true;
+      final canStart =
+          walkIn && (current == null || current['stage'] == 'Completed');
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -299,12 +411,22 @@ class _SlotDetailState extends State<SlotDetail> {
                 warning: true,
               ),
           ],
-          if ((current == null || current['stage'] == 'Completed') &&
-              slot['zone'] == 'WALK_IN' &&
-              slot['sensorReady'] == true) ...[
-            if (slot['status'] == 'RENTED_EMPTY')
+          if (canStart && (emptySlot || stockedSlot)) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Chủ shop thao tác',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (!ready)
+              InfoBox(
+                slot['sensorEnabled'] == true
+                    ? 'Cảm biến ô chưa sẵn sàng để cấp mã. Kéo xuống để kiểm tra lại trạng thái trước khi nạp hoặc thay hoa.'
+                    : 'Ô này chưa bật quy trình nạp bằng cảm biến. Bạn có thể kiểm tra cách nạp được hỗ trợ cho ô này trong mục Hoa tại tủ trên Web.',
+                warning: true,
+              ),
+            if (emptySlot)
               FilledButton(
-                onPressed: state.busy
+                onPressed: state.busy || !ready
                     ? null
                     : () => issue(
                         state,
@@ -314,11 +436,11 @@ class _SlotDetailState extends State<SlotDetail> {
                         'START',
                         action: 'LOAD',
                       ),
-                child: const Text('Lấy OTP nạp hoa'),
+                child: const Text('Tự nạp hoa · Lấy mã mở ô'),
               ),
-            if (['STOCKED', 'PENDING_REMOVAL'].contains(slot['status'])) ...[
+            if (stockedSlot) ...[
               FilledButton(
-                onPressed: state.busy
+                onPressed: state.busy || !ready
                     ? null
                     : () => issue(
                         state,
@@ -331,7 +453,7 @@ class _SlotDetailState extends State<SlotDetail> {
                 child: const Text('Lấy OTP thu hồi hoa'),
               ),
               OutlinedButton(
-                onPressed: state.busy
+                onPressed: state.busy || !ready
                     ? null
                     : () => issue(
                         state,
@@ -345,20 +467,13 @@ class _SlotDetailState extends State<SlotDetail> {
               ),
             ],
           ],
-          if ([
-                'RENTED_EMPTY',
-                'STOCKED',
-                'PENDING_REMOVAL',
-              ].contains(slot['status']) &&
-              slot['zone'] == 'WALK_IN')
+          if (walkIn && (emptySlot || stockedSlot))
             OutlinedButton.icon(
               onPressed: state.busy ? null : () => assign(state, slot),
               icon: const Icon(Icons.person_add_outlined),
               label: const Text('Giao ô này cho nhân viên'),
             ),
-          const InfoBox(
-            'App không giữ API key thiết bị. OTP phải được xác nhận tại kiosk; cảm biến và backend quyết định kết quả thực tế.',
-          ),
+          const InfoBox('Nhập mã trên màn hình kiosk để mở đúng ô.'),
         ],
       );
     },
