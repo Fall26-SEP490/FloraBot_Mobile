@@ -4,6 +4,31 @@ import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
 
+InputSpec stockProductInput(List<Json> products, {bool required = true}) {
+  final active = products.where((p) => p['status'] == 'ACTIVE').toList();
+  int? quantity(Json p) {
+    final value = p['quantity'];
+    return value is int && value >= 0 ? value : null;
+  }
+
+  return InputSpec(
+    'productId',
+    required ? 'Mẫu hoa' : 'Mẫu hoa mới (nạp / thay)',
+    required: required,
+    choices: {for (final p in active) '${p['id']}': valueOf(p, 'name')},
+    choiceDetails: {
+      for (final p in active)
+        '${p['id']}': quantity(p) == null
+            ? 'Chưa có dữ liệu tồn shop'
+            : 'Tồn shop: ${quantity(p)} bó',
+    },
+    disabledChoices: {
+      for (final p in active)
+        if ((quantity(p) ?? 0) == 0) '${p['id']}',
+    },
+  );
+}
+
 int integerInput(String? value, {bool positive = true}) {
   final number = int.tryParse(value ?? '');
   if (number == null || (positive ? number <= 0 : number < 0)) {
@@ -129,6 +154,10 @@ class _SlotDetailState extends State<SlotDetail> {
     String? productId;
     if (operation == 'START') {
       final needsProduct = action == 'LOAD' || action == 'REPLACE';
+      final currentProducts = needsProduct
+          ? itemsOf(await widget.api.get('/api/me/products'))
+          : products;
+      if (!mounted) return;
       final form = await askForm(
         context,
         action == 'LOAD'
@@ -137,22 +166,13 @@ class _SlotDetailState extends State<SlotDetail> {
             ? 'Thu hồi hoa'
             : 'Thay hoa',
         [
-          if (needsProduct)
-            InputSpec(
-              'productId',
-              'Mẫu hoa',
-              choices: {
-                for (final p in products.where(
-                  (p) =>
-                      p['status'] == 'ACTIVE' &&
-                      (p['quantity'] as num? ?? 0) > 0,
-                ))
-                  '${p['id']}': '${p['name']} (còn ${p['quantity']})',
-              },
-            ),
+          if (needsProduct) stockProductInput(currentProducts),
           const InputSpec('reason', 'Lý do / ghi chú', minLength: 5, lines: 3),
         ],
         submitLabel: 'Lấy OTP thao tác',
+        description: needsProduct
+            ? 'Tồn shop là số bó còn tại shop, chưa nạp vào kiosk. Mẫu hết hàng không thể chọn.'
+            : null,
       );
       if (form == null) return;
       reason = form['reason']!;
@@ -332,9 +352,7 @@ class _SlotDetailState extends State<SlotDetail> {
               ].contains(slot['status']) &&
               slot['zone'] == 'WALK_IN')
             OutlinedButton.icon(
-              onPressed: state.busy
-                  ? null
-                  : () => assign(state, slot, products),
+              onPressed: state.busy ? null : () => assign(state, slot),
               icon: const Icon(Icons.person_add_outlined),
               label: const Text('Giao ô này cho nhân viên'),
             ),
@@ -349,36 +367,36 @@ class _SlotDetailState extends State<SlotDetail> {
   Future<void> assign(
     ResourceViewState state,
     Json slot,
-    List<Json> products,
   ) => state.run(() async {
-    final staff = itemsOf(
-      await widget.api.get('/api/sellers/${widget.session.sellerId}/staff'),
-    );
-    if (!mounted) return;
-    final form = await askForm(context, 'Giao thao tác ô', [
-      InputSpec(
-        'assigneeId',
-        'Nhân viên',
-        choices: {for (final p in staff) '${p['id']}': valueOf(p, 'name')},
-      ),
-      InputSpec(
-        'action',
-        'Thao tác',
-        choices: slot['status'] == 'RENTED_EMPTY'
-            ? {'LOAD': 'Nạp hoa'}
-            : {'REMOVE': 'Thu hồi', 'REPLACE': 'Thay hoa'},
-      ),
-      InputSpec(
-        'productId',
-        'Mẫu hoa mới (nạp / thay)',
-        required: false,
-        choices: {
-          for (final p in products.where((p) => p['status'] == 'ACTIVE'))
-            '${p['id']}': valueOf(p, 'name'),
-        },
-      ),
-      const InputSpec('instructions', 'Hướng dẫn', minLength: 10, lines: 3),
+    final responses = await Future.wait([
+      widget.api.get('/api/sellers/${widget.session.sellerId}/staff'),
+      widget.api.get('/api/me/products'),
     ]);
+    final staff = itemsOf(responses[0]);
+    final currentProducts = itemsOf(responses[1]);
+    if (!mounted) return;
+    final form = await askForm(
+      context,
+      'Giao thao tác ô',
+      [
+        InputSpec(
+          'assigneeId',
+          'Nhân viên',
+          choices: {for (final p in staff) '${p['id']}': valueOf(p, 'name')},
+        ),
+        InputSpec(
+          'action',
+          'Thao tác',
+          choices: slot['status'] == 'RENTED_EMPTY'
+              ? {'LOAD': 'Nạp hoa'}
+              : {'REMOVE': 'Thu hồi', 'REPLACE': 'Thay hoa'},
+        ),
+        stockProductInput(currentProducts, required: false),
+        const InputSpec('instructions', 'Hướng dẫn', minLength: 10, lines: 3),
+      ],
+      description:
+          'Tồn shop là số bó còn tại shop. Mẫu hết hàng không thể chọn để nạp/thay; thu hồi không cần mẫu mới.',
+    );
     if (form == null) return;
     if (form['action'] != 'REMOVE' && (form['productId'] ?? '').isEmpty) {
       throw const ApiError(400, 'Chọn mẫu hoa khi nạp hoặc thay hoa.');

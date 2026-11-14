@@ -352,12 +352,16 @@ class InputSpec {
     this.secret = false,
     this.numeric = false,
     this.choices,
+    this.choiceDetails = const {},
+    this.disabledChoices = const {},
     this.minLength = 1,
   });
   final String key, label, initial;
   final bool required, secret, numeric;
   final int lines, minLength;
   final Map<String, String>? choices;
+  final Map<String, String> choiceDetails;
+  final Set<String> disabledChoices;
 }
 
 Future<Map<String, String>?> askForm(
@@ -432,22 +436,73 @@ class _InputSheetState extends State<_InputSheet> {
                             ? f.initial
                             : null,
                         isExpanded: true,
+                        isDense: f.choiceDetails.isEmpty,
+                        itemHeight: f.choiceDetails.isEmpty
+                            ? kMinInteractiveDimension
+                            : 64,
                         decoration: InputDecoration(labelText: f.label),
                         items: f.choices!.entries
                             .map(
                               (e) => DropdownMenuItem(
                                 value: e.key,
-                                child: Text(
-                                  e.value,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                enabled: !f.disabledChoices.contains(e.key),
+                                child: f.choiceDetails.containsKey(e.key)
+                                    ? Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            e.value,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color:
+                                                  f.disabledChoices.contains(
+                                                    e.key,
+                                                  )
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).disabledColor
+                                                  : null,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            f.choiceDetails[e.key]!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  f.disabledChoices.contains(
+                                                    e.key,
+                                                  )
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).disabledColor
+                                                  : forest,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : Text(
+                                        e.value,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                               ),
                             )
                             .toList(),
                         onChanged: (v) => controllers[f.key]!.text = v ?? '',
-                        validator: (v) => f.required && (v == null || v.isEmpty)
-                            ? 'Vui lòng chọn ${f.label.toLowerCase()}.'
-                            : null,
+                        validator: (v) {
+                          if (f.required && (v == null || v.isEmpty)) {
+                            return 'Vui lòng chọn ${f.label.toLowerCase()}.';
+                          }
+                          if (v != null && f.disabledChoices.contains(v)) {
+                            return 'Lựa chọn này hiện không khả dụng.';
+                          }
+                          return null;
+                        },
                       )
                     : TextFormField(
                         controller: controllers[f.key],
