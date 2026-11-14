@@ -12,10 +12,12 @@ Code Mobile đang ở nhánh `feature/flutter-role-workspaces`. Mở terminal t�
 git clone -b feature/flutter-role-workspaces https://github.com/Fall26-SEP490/FloraBot_Mobile.git
 cd FloraBot_Mobile
 flutter pub get
-flutter run -d chrome
+flutter run -d chrome --web-hostname=localhost --web-port=57466
 ```
 
 Lệnh cuối mở giao diện trên Chrome. Repository riêng tư yêu cầu tài khoản GitHub đã được cấp quyền truy cập.
+
+Dùng cổng cố định `57466` để origin luôn là `http://localhost:57466`; Backend phải cho phép chính xác origin này. Cổng ngẫu nhiên của Flutter có thể thay đổi mỗi lần chạy. Nếu gặp lỗi CORS, xem phần bên dưới trước khi thử đăng nhập lại.
 
 Để chạy trên điện thoại Android, cắm cáp USB, bật Developer options và USB debugging, chấp nhận kết nối trên điện thoại rồi chạy:
 
@@ -57,7 +59,7 @@ Thay tên nhánh và `<cac-file-da-sua>` bằng giá trị thực tế; không c
 
 Triển khai nhánh `feature/mobile-token-auth` của repository FloraBot_BE trước khi đăng nhập Mobile. Bản app yêu cầu `/api/mobile/auth/*` và trường version/status trên chi tiết công việc. Không cần thay schema DB. Xem `FloraBot_BE/docs/mobile-auth.md`.
 
-Máy chủ production hiện chưa được thay đổi bởi công việc này. Nếu nhận 404 ở đăng nhập Mobile, cần deploy Backend đi kèm; không đổi app sang gửi mật khẩu/cookie qua đường khác.
+Push code không tự triển khai Backend. Nếu nhận 404 ở đăng nhập Mobile, cần kiểm tra bản Backend đã triển khai có endpoint tương ứng. Lỗi CORS là bước kiểm tra riêng, không chứng minh API đăng nhập chưa có.
 
 ## Chạy bằng PowerShell
 
@@ -73,10 +75,27 @@ Chọn device Android trong danh sách hoặc thêm `-d <device-id>`. Cắm đi�
 Thử giao diện trên trình duyệt:
 
 ```powershell
-flutter run -d chrome --dart-define=API_BASE_URL=https://api.florabot.site
+flutter run -d chrome --web-hostname=localhost --web-port=57466 --dart-define=API_BASE_URL=https://api.florabot.site
 ```
 
 Web preview không lưu phiên qua lần đóng tab. Backend phải cho phép đúng origin CORS để đăng nhập từ trình duyệt. Android/iOS không dùng cookie Web. API_BASE_URL phải là HTTPS origin, không có path/query/credentials. Nếu dùng HTTP local, chỉ cho bản debug với `--dart-define=ALLOW_LOCAL_HTTP=true`; cần cấu hình mạng riêng của nền tảng, không bật cleartext cho bản release.
+
+## Khi Chrome báo lỗi CORS
+
+Ví dụ: `No 'Access-Control-Allow-Origin' header` khi gọi API từ `http://localhost:57466`. Đây là trình duyệt chặn trước khi app nhận được phản hồi đăng nhập/đăng ký; nhập lại mật khẩu không giải quyết được.
+
+1. Dừng Flutter Web rồi chạy lại bằng lệnh cổng cố định ở trên.
+2. Người quản trị Backend đọc giá trị `ALLOWED_ORIGINS` đang dùng bởi FloraBot.Api, giữ nguyên các origin hiện có và thêm `http://localhost:57466` vào danh sách phân cách bằng dấu phẩy. Đây là cấu hình của **Backend**, không phải dart-define của app. Không thêm dấu `/` cuối origin. `localhost` và `127.0.0.1` là hai origin khác nhau.
+3. Áp dụng cấu hình theo môi trường triển khai và khởi động lại ứng dụng API (recycle App Pool tương ứng nếu dùng IIS). Thay file `.env.example` trong repository không cập nhật server đang chạy.
+4. Kiểm tra preflight mà không gửi tài khoản/mật khẩu:
+
+```powershell
+.\scripts\check-web-cors.ps1
+```
+
+Script kiểm tra OPTIONS cho đăng nhập và đăng ký, yêu cầu header cho đúng origin, POST và content-type/authorization. Chỉ có status 204 chưa đủ: phải có `Access-Control-Allow-Origin: http://localhost:57466`. Kiểm tra preflight đạt không thay thế việc kiểm tra endpoint đăng nhập thật.
+
+Không tắt bảo mật Chrome, không dùng `no-cors` và không thay allowlist bằng `*`. Nếu chạy staging/local Backend, sửa cấu hình origin ở chính Backend đó và truyền `--dart-define=API_BASE_URL=https://<api-origin>` cho Flutter. Android/iOS native không chịu cơ chế CORS của trình duyệt; vẫn cần API, mạng và thông tin đăng nhập hợp lệ.
 
 ## Kiểm tra và build
 
