@@ -192,9 +192,12 @@ class ResourceViewState extends State<ResourceView> {
 
   Future<void> reload() async {
     if (!mounted) return;
-    setState(() => future = widget.load());
+    final next = widget.load();
+    setState(() {
+      future = next;
+    });
     try {
-      await future;
+      await next;
     } catch (_) {
       /* Render the error, with explicit retry. */
     }
