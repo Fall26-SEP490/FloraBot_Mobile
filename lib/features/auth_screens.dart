@@ -25,7 +25,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final formKey = GlobalKey<FormState>();
   final email = TextEditingController(), password = TextEditingController();
-  AppRole role = AppRole.customer;
   bool busy = false, obscure = true;
   String? error;
   @override
@@ -43,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
       error = null;
     });
     try {
-      await widget.auth.login(email.text, password.text, role);
+      await widget.auth.login(email.text, password.text);
     } catch (e) {
       if (mounted) {
         setState(
@@ -64,11 +63,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) => Scaffold(
     body: FloralBackdrop(
       child: SafeArea(
-        child: Center(
+        child: Align(
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
               child: AutofillGroup(
                 child: Form(
                   key: formKey,
@@ -76,11 +76,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const BrandWordmark(),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       const LoginArtwork(),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 24),
                       const Text(
-                        'Chào mừng trở lại.',
+                        'Đăng nhập',
                         style: TextStyle(
                           fontSize: 28,
                           height: 1.15,
@@ -91,37 +91,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 7),
                       const Text(
-                        'Dùng email và mật khẩu để tiếp tục ngày mới.',
+                        'Nhập email và mật khẩu của bạn.',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 14,
                           color: Color(0xFF617568),
                           height: 1.5,
                         ),
                       ),
-                      const SizedBox(height: 22),
-                      DropdownButtonFormField<AppRole>(
-                        initialValue: role,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Vai trò của bạn',
-                          prefixIcon: Icon(Icons.badge_outlined),
-                        ),
-                        items: AppRole.values
-                            .map(
-                              (r) => DropdownMenuItem(
-                                value: r,
-                                child: Text(r.label),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: busy
-                            ? null
-                            : (v) => setState(() {
-                                role = v!;
-                                error = null;
-                              }),
-                      ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 18),
                       TextFormField(
                         controller: email,
                         keyboardType: TextInputType.emailAddress,
@@ -162,10 +139,30 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? 'Nhập mật khẩu hợp lệ.'
                             : null,
                       ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: busy
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => _PasswordRecoveryScreen(
+                                      widget.auth.api,
+                                      initialEmail: email.text.trim(),
+                                    ),
+                                  ),
+                                ),
+                          child: const Text('Quên mật khẩu?'),
+                        ),
+                      ),
                       if (error != null || widget.auth.error != null)
                         InfoBox(error ?? widget.auth.error!, warning: true),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 8),
                       FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 52),
+                        ),
                         onPressed: busy ? null : login,
                         child: busy
                             ? const SizedBox(
@@ -176,49 +173,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text('Đăng nhập'),
-                                  SizedBox(width: 10),
-                                  Icon(Icons.arrow_forward_rounded, size: 18),
-                                ],
-                              ),
+                            : const Text('Đăng nhập'),
                       ),
-                      TextButton(
-                        onPressed: busy ? null : forgot,
-                        child: const Text('Quên mật khẩu?'),
-                      ),
-                      if (role == AppRole.customer)
-                        OutlinedButton(
-                          onPressed: busy
-                              ? null
-                              : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        RegistrationScreen(widget.auth.api),
-                                  ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          backgroundColor: Colors.white,
+                          side: const BorderSide(color: Color(0xFF94A99E)),
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      RegistrationScreen(widget.auth.api),
                                 ),
-                          child: const Text('Tạo tài khoản khách đặt trước'),
-                        ),
-                      if (role == AppRole.customer || role == AppRole.seller)
-                        TextButton(
-                          onPressed: busy
-                              ? null
-                              : () => resetPassword(context, widget.auth.api),
-                          child: const Text(
-                            'Tôi đã có liên kết đặt lại mật khẩu',
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Đăng nhập bằng email và mật khẩu được cấp. Tài khoản kỹ thuật viên và nhân viên do người quản lý tạo.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF617568),
-                          height: 1.5,
-                        ),
+                              ),
+                        child: const Text('Tạo tài khoản'),
                       ),
                     ],
                   ),
@@ -230,45 +203,154 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     ),
   );
-  Future<void> forgot() async {
-    if (role == AppRole.technician || role == AppRole.staff) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Hỗ trợ tài khoản'),
-          content: Text(
-            role == AppRole.technician
-                ? 'Liên hệ Manager quản lý tài khoản kỹ thuật viên để được hỗ trợ khôi phục quyền truy cập.'
-                : 'Liên hệ chủ shop quản lý tài khoản nhân viên để được hỗ trợ khôi phục quyền truy cập.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Đã hiểu'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-    final values = await askForm(context, 'Khôi phục mật khẩu', [
-      InputSpec('email', 'Email đăng nhập', initial: email.text),
-    ], submitLabel: 'Gửi liên kết');
-    if (values == null) return;
+}
+
+class _PasswordRecoveryScreen extends StatefulWidget {
+  const _PasswordRecoveryScreen(this.api, {required this.initialEmail});
+
+  final ApiClient api;
+  final String initialEmail;
+
+  @override
+  State<_PasswordRecoveryScreen> createState() =>
+      _PasswordRecoveryScreenState();
+}
+
+class _PasswordRecoveryScreenState extends State<_PasswordRecoveryScreen> {
+  final formKey = GlobalKey<FormState>();
+  late final email = TextEditingController(text: widget.initialEmail);
+  bool busy = false;
+  String? notice, error;
+
+  @override
+  void dispose() {
+    email.dispose();
+    super.dispose();
+  }
+
+  Future<void> sendLink() async {
+    if (busy || !formKey.currentState!.validate()) return;
+    setState(() {
+      busy = true;
+      error = null;
+      notice = null;
+    });
     try {
       final result = objectOf(
-        await widget.auth.api.request(
+        await widget.api.request(
           'POST',
           '/api/auth/forgot-password',
           authenticated: false,
-          body: values,
+          body: {'email': email.text.trim()},
         ),
       );
-      if (mounted) message(context, valueOf(result, 'message'));
+      if (mounted) setState(() => notice = valueOf(result, 'message'));
     } catch (e) {
-      if (mounted) message(context, '$e');
+      if (mounted) setState(() => error = '$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(),
+    body: SafeArea(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            child: Form(
+              key: formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE3EEDC),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.lock_reset_rounded, color: forest),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Quên mật khẩu?',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: forest,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Nhập email đăng nhập để nhận liên kết đặt lại mật khẩu.',
+                    style: TextStyle(color: Color(0xFF53685D), height: 1.5),
+                  ),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: email,
+                    enabled: !busy,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'Email đăng nhập',
+                      prefixIcon: Icon(Icons.alternate_email),
+                    ),
+                    validator: (value) => validEmail((value ?? '').trim())
+                        ? null
+                        : 'Nhập email hợp lệ.',
+                    onFieldSubmitted: (_) => sendLink(),
+                  ),
+                  if (notice != null || error != null) ...[
+                    const SizedBox(height: 12),
+                    InfoBox(error ?? notice!, warning: error != null),
+                  ],
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 52),
+                    ),
+                    onPressed: busy ? null : sendLink,
+                    child: Text(busy ? 'Đang gửi…' : 'Gửi liên kết'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => resetPassword(context, widget.api),
+                    child: const Text('Đã nhận liên kết? Đặt lại mật khẩu'),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: Color(0xFFD4E0D4)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tài khoản được cấp',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: forest,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Nhân viên liên hệ chủ shop. Kỹ thuật viên liên hệ Quản lý vận hành.',
+                    style: TextStyle(color: Color(0xFF53685D), height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 Future<void> resetPassword(BuildContext context, ApiClient api) async {
@@ -322,6 +404,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final name = TextEditingController(),
       email = TextEditingController(),
       password = TextEditingController(),
+      confirmPassword = TextEditingController(),
       code = TextEditingController();
   String? challenge, error;
   int cooldown = 0;
@@ -330,7 +413,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   void dispose() {
     timer?.cancel();
-    for (final c in [name, email, password, code]) {
+    for (final c in [name, email, password, confirmPassword, code]) {
       c.clear();
       c.dispose();
     }
@@ -387,7 +470,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Tài khoản khách đặt trước')),
+    appBar: AppBar(title: const Text('Tạo tài khoản')),
     body: SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Form(
@@ -396,7 +479,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const PageTitle(
-              'Chào mừng bạn',
+              'Thông tin đăng ký',
               'Xác minh email để theo dõi đơn và nhận OTP lấy hoa.',
             ),
             TextFormField(
@@ -419,6 +502,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             TextFormField(
               controller: password,
               obscureText: true,
+              autofillHints: const [AutofillHints.newPassword],
               readOnly: challenge != null,
               decoration: const InputDecoration(
                 labelText: 'Mật khẩu (ít nhất 12 ký tự)',
@@ -427,7 +511,23 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ? null
                   : 'Tối thiểu 12 ký tự, tối đa 72 byte UTF-8.',
             ),
-            if (challenge != null) ...[
+            if (challenge == null) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: confirmPassword,
+                obscureText: true,
+                autofillHints: const [AutofillHints.newPassword],
+                decoration: const InputDecoration(
+                  labelText: 'Xác nhận mật khẩu',
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Nhập lại mật khẩu.';
+                  }
+                  return value == password.text ? null : 'Mật khẩu không khớp.';
+                },
+              ),
+            ] else ...[
               const InfoBox(
                 'Kiểm tra email và nhập mã xác thực. Đây không phải mã nhận hoa.',
               ),

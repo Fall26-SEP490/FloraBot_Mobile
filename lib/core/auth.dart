@@ -80,17 +80,20 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> login(String email, String password, AppRole role) async {
+  Future<void> login(String email, String password) async {
     final epoch = ++_epoch;
     error = null;
-    final json = objectOf(
-      await api.request(
-        'POST',
-        '/api/mobile/auth/login',
-        authenticated: false,
-        body: {'email': email.trim(), 'password': password, 'role': role.code},
-      ),
+    final credentials = {'email': email.trim(), 'password': password};
+    Future<Json> signIn(String path) async => objectOf(
+      await api.request('POST', path, authenticated: false, body: credentials),
     );
+    Json json;
+    try {
+      json = await signIn('/api/mobile/auth/login');
+    } on ApiError catch (e) {
+      if (e.status != 401 || epoch != _epoch) rethrow;
+      json = await signIn('/api/mobile/auth/admin/login');
+    }
     if (epoch != _epoch) return;
     await _accept(json, epoch);
     notifyListeners();

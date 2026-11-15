@@ -23,6 +23,63 @@ ApiClient client(Future<http.Response> Function(http.Request) handle) =>
     ApiClient(Uri.parse('https://example.test'), transport: MockClient(handle));
 
 void main() {
+  test('login sends credentials only and uses the account role', () async {
+    final auth = AuthController(
+      client((request) async {
+        expect(request.url.path, '/api/mobile/auth/login');
+        expect(jsonDecode(request.body), {
+          'email': 'test@example.test',
+          'password': 'password',
+        });
+        return http.Response(jsonEncode(payload('SELLER_STAFF')), 200);
+      }),
+      MemoryTokenVault(),
+    );
+    await auth.login(' test@example.test ', 'password');
+    expect(auth.session?.role, AppRole.staff);
+  });
+
+  test(
+    'technician uses admin login after ordinary login returns 401',
+    () async {
+      final paths = <String>[];
+      final auth = AuthController(
+        client((request) async {
+          paths.add(request.url.path);
+          expect(jsonDecode(request.body), {
+            'email': 'tech@example.test',
+            'password': 'password',
+          });
+          return request.url.path == '/api/mobile/auth/login'
+              ? http.Response('', 401)
+              : http.Response(jsonEncode(payload('TECHNICIAN')), 200);
+        }),
+        MemoryTokenVault(),
+      );
+      await auth.login('tech@example.test', 'password');
+      expect(paths, ['/api/mobile/auth/login', '/api/mobile/auth/admin/login']);
+      expect(auth.session?.role, AppRole.technician);
+    },
+  );
+
+  test('a server or rate limit error does not trigger admin login', () async {
+    for (final status in [429, 503]) {
+      final paths = <String>[];
+      final auth = AuthController(
+        client((request) async {
+          paths.add(request.url.path);
+          return http.Response('', status);
+        }),
+        MemoryTokenVault(),
+      );
+      await expectLater(
+        auth.login('test@example.test', 'password'),
+        throwsA(isA<ApiError>().having((e) => e.status, 'status', status)),
+      );
+      expect(paths, ['/api/mobile/auth/login']);
+    }
+  });
+
   test(
     'evidence uploads raw image bytes with receipt token in header only',
     () async {
@@ -62,7 +119,7 @@ void main() {
         return http.Response(jsonEncode(payload()), 200);
       });
       final auth = AuthController(api, vault);
-      await auth.login('test@example.test', 'password', AppRole.customer);
+      await auth.login('test@example.test', 'password');
       final stored = vault.value;
       offline = true;
       await expectLater(auth.refresh(), throwsA(isA<ApiError>()));
@@ -140,7 +197,7 @@ void main() {
       );
     });
     final auth = AuthController(api, vault);
-    await auth.login('test@example.test', 'password', AppRole.customer);
+    await auth.login('test@example.test', 'password');
     final one = api.get('/api/one'), two = api.get('/api/two');
     await Future<void>.delayed(Duration.zero);
     gate.complete();
@@ -157,7 +214,7 @@ void main() {
       throw http.ClientException('offline');
     });
     final auth = AuthController(api, vault);
-    await auth.login('test@example.test', 'password', AppRole.customer);
+    await auth.login('test@example.test', 'password');
     await auth.logout();
     expect(vault.value, isNull);
     expect(api.accessToken, isNull);
