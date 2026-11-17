@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
+import 'technician_iot_health.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage(this.api, this.session, {super.key});
@@ -204,6 +205,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             InfoBox(
               'Ô ${detail['slotCode']} • ${statusText(detail['slotStatus'])}',
             ),
+          if (widget.session.role == AppRole.technician)
+            TechnicianIoTHealth(api: widget.api, taskId: id),
           if (detail['incident'] is Map)
             InfoBox(
               valueOf(
