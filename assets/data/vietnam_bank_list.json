@@ -1,0 +1,502 @@
+[
+  {
+    "name": "Ngân hàng Chính sách xã hội",
+    "nameEn": "Vietnam Bank for Social Policies",
+    "code": "NHCSXH/VBSP"
+  },
+  {
+    "name": "Ngân hàng Phát triển Việt Nam",
+    "nameEn": "Vietnam Development Bank",
+    "code": "VDB"
+  },
+  {
+    "name": "Ngân hàng Nông nghiệp và Phát triển Nông thôn VN",
+    "nameEn": "Vietnam Bank for Agriculture and Rural Development",
+    "code": "Agribank"
+  },
+  {
+    "name": "Ngân hàng Xây dựng",
+    "nameEn": "Construction Bank",
+    "code": "CB"
+  },
+  {
+    "name": "Ngân hàng Đại Dương",
+    "nameEn": "Ocean Bank",
+    "code": "Oceanbank"
+  },
+  {
+    "name": "Ngân hàng Dầu Khí Toàn Cầu",
+    "nameEn": "Global Petro Bank",
+    "code": "GPBank"
+  },
+  {
+    "name": "Đầu tư và Phát triển Việt Nam",
+    "nameEn": "Vietnam Commercial Bank for Investment and Development JSC",
+    "code": "BIDV, BID"
+  },
+  {
+    "name": "Công Thương Việt Nam",
+    "nameEn": "Vietnam Joint Stock Commercial Bank for Industry and Trade",
+    "code": "VietinBank, CTG"
+  },
+  {
+    "name": "Ngoại thương Việt Nam",
+    "nameEn": "JSC Bank for Foreign Trade of Vietnam",
+    "code": "Vietcombank, VCB"
+  },
+  {
+    "name": "Việt Nam Thịnh Vượng",
+    "nameEn": "Vietnam Prosperity Bank",
+    "code": "VPBank, VPB"
+  },
+  {
+    "name": "Quân đội",
+    "nameEn": "Military Commercial Joint Stock Bank",
+    "code": "MB, MBB"
+  },
+  {
+    "name": "Kỹ Thương Việt Nam",
+    "nameEn": "VietNam Technological and Commercial Joint Stock Bank",
+    "code": "Techcombank, TCB"
+  },
+  {
+    "name": "Ngân hàng Á Châu",
+    "nameEn": "Asia Commercial Joint Stock Bank",
+    "code": "ACB"
+  },
+  {
+    "name": "Sài Gòn-Hà Nội",
+    "nameEn": "Saigon - Hanoi Commercial Joint Stock Bank",
+    "code": "SHB"
+  },
+  {
+    "name": "NH TMCP Phát triển Nhà Tp HCM",
+    "nameEn": "Ho Chi Minh City Development Bank",
+    "code": "HDBank, HDB"
+  },
+  {
+    "name": "Ngân hàng TMCP Sài Gòn",
+    "nameEn": "Sai Gon Commercial Bank",
+    "code": "SCB"
+  },
+  {
+    "name": "Sài Gòn Thương Tín",
+    "nameEn": "Sai Gon Thuong Tin Commercial Joint Stock Bank",
+    "code": "Sacombank, STB"
+  },
+  {
+    "name": "Ngân hàng Tiên Phong",
+    "nameEn": "Tien Phong Bank",
+    "code": "TPBank, TPB"
+  },
+  {
+    "name": "NH TMCP Quốc tế Việt Nam",
+    "nameEn": "Vietnam International and Commercial Joint Stock Bank",
+    "code": "VIB"
+  },
+  {
+    "name": "Hàng Hải Việt Nam",
+    "nameEn": "Vietnam Maritime Joint - Stock Commercial Bank",
+    "code": "MSB"
+  },
+  {
+    "name": "Ngân hàng Đông Nam Á",
+    "nameEn": "South East Asia Bank",
+    "code": "SeABank, SSB"
+  },
+  {
+    "name": "Phương Đông",
+    "nameEn": "Orient Commercial Joint Stock Bank",
+    "code": "OCB"
+  },
+  {
+    "name": "Ngân hàng xuất nhập khẩu Việt Nam",
+    "nameEn": "Vietnam Export Import Commercial Joint Stock Bank",
+    "code": "Eximbank, EIB"
+  },
+  {
+    "name": "Bưu điện Liên Việt",
+    "nameEn": "Lien Viet Postal Commercial Joint Stock Bank",
+    "code": "LPbank, LPB"
+  },
+  {
+    "name": "Đại chúng Việt Nam",
+    "nameEn": "Vietnam Public Joint Stock Commercial Bank",
+    "code": "PVcombank"
+  },
+  {
+    "name": "Ngân hàng TMCP Bắc Á",
+    "nameEn": "Bac A Bank",
+    "code": "Bac A Bank, BAB"
+  },
+  {
+    "name": "Ngân hàng An Bình",
+    "nameEn": "An Binh Bank",
+    "code": "ABBANK, ABB"
+  },
+  {
+    "name": "Ngân hàng TMCP Đông Á",
+    "nameEn": "Dong A Bank",
+    "code": "Đông Á Bank"
+  },
+  {
+    "name": "Bảo Việt",
+    "nameEn": "Bao Viet Bank",
+    "code": "BaoViet Bank"
+  },
+  {
+    "name": "Ngân hàng TMCP Nam Á",
+    "nameEn": "Nam A Bank",
+    "code": "Nam A Bank, NAB"
+  },
+  {
+    "name": "Việt Nam Thương Tín",
+    "nameEn": "Vietnam Thuong Tin Commercial Joint Stock Bank",
+    "code": "VietBank, VBB"
+  },
+  {
+    "name": "Ngân hàng TMCP Việt Á",
+    "nameEn": "Viet A Bank",
+    "code": "Viet A Bank, VAB"
+  },
+  {
+    "name": "Quốc Dân",
+    "nameEn": "National Citizen Bank",
+    "code": "NCB"
+  },
+  {
+    "name": "Ngân hàng Bản Việt",
+    "nameEn": "Viet Capital Bank",
+    "code": "BVBank, BVB"
+  },
+  {
+    "name": "Kiên Long",
+    "nameEn": "Kien Long Commercial Joint Stock Bank",
+    "code": "Kienlongbank, KLB"
+  },
+  {
+    "name": "Sài Gòn Công Thương",
+    "nameEn": "Saigon Bank for Industry and Trade",
+    "code": "Saigonbank, SGB"
+  },
+  {
+    "name": "Xăng dầu Petrolimex",
+    "nameEn": "Petrolimex Commercial Joint Stock Bank",
+    "code": "PG Bank, PGB"
+  },
+  {
+    "name": "Ngân hàng TNHH MTV Shinhan Việt Nam",
+    "nameEn": "",
+    "code": "Shinhan Bank"
+  },
+  {
+    "name": "Ngân hàng TNHH một thành viên HSBC Việt Nam",
+    "nameEn": "",
+    "code": "HSBC"
+  },
+  {
+    "name": "Ngân hàng Standard Chartered",
+    "nameEn": "",
+    "code": "Standard Chartered"
+  },
+  {
+    "name": "Ngân hàng Woori Bank tại Việt Nam",
+    "nameEn": "",
+    "code": "Woori Bank"
+  },
+  {
+    "name": "Ngân hàng CIMB tại Việt Nam",
+    "nameEn": "",
+    "code": "CIMB Bank"
+  },
+  {
+    "name": "Ngân hàng Public Bank Việt Nam",
+    "nameEn": "",
+    "code": "Public Bank"
+  },
+  {
+    "name": "Ngân hàng Hong Leong Việt Nam",
+    "nameEn": "",
+    "code": "Hong Leong Bank"
+  },
+  {
+    "name": "Ngân hàng UOB tại Việt Nam",
+    "nameEn": "",
+    "code": "UOB"
+  },
+  {
+    "name": "Ngân hàng TNHH một thành viên ANZ Việt Nam",
+    "nameEn": "",
+    "code": "ANZ"
+  },
+  {
+    "name": "Ngân hàng Citibank Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Deutsche Bank Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Đầu tư và Phát triển Campuchia",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Mizuho",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng MUFG Bank",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Sumitomo Mitsui Banking Corporation",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Commonwealth Bank tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Bank of China tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Maybank tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng ICBC tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Scotiabank tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Commercial Siam bank tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng BNP Paribas tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Bankok bank tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng WB tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng RHB (Malaysia) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Intesa Sanpaolo (Italia) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng JP Morgan Chase Bank (Mỹ) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Wells Fargo (Mỹ) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng BHF - Bank Aktiengesellschaft (Đức) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Unicredit Bank AG (Đức) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Landesbank Baden-Wuerttemberg (Đức) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Commerzbank AG (Đức) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Bank Sinopac (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Chinatrust Commercial Bank (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Union Bank of Taiwan (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Hua Nan Commercial Bank, Ltd (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Cathay United Bank (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Taishin International Bank (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Land Bank of Taiwan (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng The Shanghai Commercial and Savings Bank, Ltd (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Taiwan Shin Kong Commercial Bank (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng E.Sun Commercial Bank (Đài Loan) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Natixis Banque BFCE (Pháp) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Société Générale Bank - tại TP. HCM (Pháp) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Fortis Bank (Bỉ) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng RBI (Áo) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Phongsavanh (Lào) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Acom Co., Ltd (Nhật) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Mitsubishi UFJ Lease & Finance Company Limited (Nhật) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Industrial Bank of Korea (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng KEB Hana (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Kookmin Bank (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Bank of India (Ấn Độ) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Indian Oversea Bank (Ấn Độ) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Rothschild Limited (Singapore) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng The Export-Import Bank of Korea (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Busan - (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Ogaki Kyorítu (Nhật Bản) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Phát triển Hàn Quốc (Hàn Quốc) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Phát triển châu Á (ADB) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng BPCE",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Oversea-Chinese Banking Corp (OCBC) tại Việt Nam",
+    "nameEn": "",
+    "code": ""
+  },
+  {
+    "name": "Ngân hàng Kbank Việt Nam",
+    "nameEn": "",
+    "code": ""
+  }
+]

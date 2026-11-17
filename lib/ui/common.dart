@@ -349,12 +349,14 @@ class InputSpec {
     this.secret = false,
     this.numeric = false,
     this.choices,
+    this.picker,
     this.minLength = 1,
   });
   final String key, label, initial;
   final bool required, secret, numeric;
   final int lines, minLength;
   final Map<String, String>? choices;
+  final Future<String?> Function(BuildContext)? picker;
 }
 
 Future<Map<String, String>?> askForm(
@@ -448,6 +450,15 @@ class _InputSheetState extends State<_InputSheet> {
                       )
                     : TextFormField(
                         controller: controllers[f.key],
+                        readOnly: f.picker != null,
+                        onTap: f.picker == null
+                            ? null
+                            : () async {
+                                final value = await f.picker!(context);
+                                if (mounted && value != null) {
+                                  controllers[f.key]!.text = value;
+                                }
+                              },
                         obscureText: f.secret,
                         autocorrect: !f.secret,
                         enableSuggestions: !f.secret,
@@ -457,11 +468,18 @@ class _InputSheetState extends State<_InputSheet> {
                                 decimal: true,
                               )
                             : TextInputType.text,
-                        decoration: InputDecoration(labelText: f.label),
+                        decoration: InputDecoration(
+                          labelText: f.label,
+                          suffixIcon: f.picker == null
+                              ? null
+                              : const Icon(Icons.arrow_drop_down),
+                        ),
                         validator: (v) {
                           final text = f.secret ? (v ?? '') : (v ?? '').trim();
                           if (f.required && text.length < f.minLength) {
-                            return 'Nhập ít nhất ${f.minLength} ký tự.';
+                            return f.picker == null
+                                ? 'Nhập ít nhất ${f.minLength} ký tự.'
+                                : 'Vui lòng chọn ${f.label.toLowerCase()}.';
                           }
                           if (text.isNotEmpty &&
                               f.numeric &&

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
+import '../ui/vietnam_bank_picker.dart';
 
 // Receipt possession credentials stay in memory and in HTTPS bodies/headers.
 class ReceiptPage extends StatelessWidget {
@@ -98,6 +99,7 @@ class ReceiptPage extends StatelessWidget {
                             const InputSpec(
                               'bank',
                               'Tên ngân hàng',
+                              picker: pickVietnamBank,
                               minLength: 2,
                             ),
                             const InputSpec(
