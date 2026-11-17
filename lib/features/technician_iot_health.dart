@@ -19,12 +19,21 @@ const _cycleText = {
 class TechnicianIoTHealth extends StatefulWidget {
   const TechnicianIoTHealth({
     required this.api,
-    required this.taskId,
+    required String taskId,
     super.key,
-  });
+  }) : path = '/api/staff/tasks/$taskId/iot-health',
+       wholeKiosk = false;
+
+  const TechnicianIoTHealth.forKiosk({
+    required this.api,
+    required String kioskId,
+    super.key,
+  }) : path = '/api/staff/kiosk-health/$kioskId',
+       wholeKiosk = true;
 
   final ApiClient api;
-  final String taskId;
+  final String path;
+  final bool wholeKiosk;
 
   @override
   State<TechnicianIoTHealth> createState() => _TechnicianIoTHealthState();
@@ -36,15 +45,19 @@ class _TechnicianIoTHealthState extends State<TechnicianIoTHealth> {
   bool _loading = false;
   bool _failed = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.wholeKiosk) _onExpansionChanged(true);
+  }
+
   Future<void> _read() async {
     if (_loading) return;
     setState(() {
       _loading = true;
     });
     try {
-      final health = objectOf(
-        await widget.api.get('/api/staff/tasks/${widget.taskId}/iot-health'),
-      );
+      final health = objectOf(await widget.api.get(widget.path));
       if (!mounted) return;
       setState(() {
         _health = health;
@@ -92,61 +105,107 @@ class _TechnicianIoTHealthState extends State<TechnicianIoTHealth> {
         DateTime.now().difference(checkedAt) <= const Duration(seconds: 45);
     final slots = health?['slots'];
     final rows = slots is List ? slots.whereType<Map>() : const <Map>[];
+    final content = <Widget>[
+      if (_loading && health == null && !_failed)
+        const Text('Đang đọc tín hiệu từ tủ…'),
+      if (_failed) const Text('Chưa tải được dữ liệu IoT. Hãy thử đọc lại.'),
+      if (health != null) ...[
+        if (widget.wholeKiosk) ...[
+          StatusChip(health['kioskStatus']),
+          Text('Heartbeat gần nhất ${dateText(health['lastHeartbeatAt'])}'),
+        ],
+        Text(
+          checkedAt == null
+              ? 'Chưa nhận được bản đo từ tủ'
+              : 'Lần đo gần nhất ${dateText(health['observedAt'])}',
+        ),
+        if (!fresh)
+          const Text('Đang chờ dữ liệu mới. Trạng thái từng ô chưa xác định.'),
+        if (rows.isEmpty) const Text('Chưa có ô tủ để kiểm tra.'),
+        for (final slot in rows)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('Ô ${slot['slotCode']}'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'LM393 · ${_signal(fresh, slot['flowerDetected'], 'Phát hiện vật', 'Không phát hiện vật')}',
+                ),
+                Text(
+                  'MC-38 · ${_signal(fresh, slot['doorClosed'], 'Báo cửa đóng', 'Báo cửa mở')}',
+                ),
+                Text(
+                  fresh
+                      ? (_cycleText[slot['lastCycle']] ??
+                            'Chưa có dữ liệu thao tác cửa')
+                      : 'Thao tác cửa gần nhất chưa xác định',
+                ),
+                if (fresh && slot['lastCycleAt'] != null)
+                  Text(dateText(slot['lastCycleAt'])),
+              ],
+            ),
+          ),
+        const Text(
+          'Nếu tín hiệu không khớp thực tế, hãy kiểm tra dây cảm biến, nam châm, nguồn khóa và cơ cấu chốt tại ô. Tủ hiện chưa đo dòng qua khóa điện.',
+        ),
+      ],
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        onPressed: _loading ? null : _read,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Đọc lại tín hiệu'),
+      ),
+    ];
+    if (widget.wholeKiosk) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: content,
+      );
+    }
     return ExpansionTile(
       title: const Text('Sức khỏe thiết bị IoT'),
       tilePadding: EdgeInsets.zero,
       expandedCrossAxisAlignment: CrossAxisAlignment.start,
       onExpansionChanged: _onExpansionChanged,
-      children: [
-        if (_loading && health == null && !_failed)
-          const Text('Đang đọc tín hiệu từ tủ…'),
-        if (_failed) const Text('Chưa tải được dữ liệu IoT. Hãy thử đọc lại.'),
-        if (health != null) ...[
-          Text(
-            checkedAt == null
-                ? 'Chưa nhận được bản đo từ tủ'
-                : 'Lần đo gần nhất ${dateText(health['observedAt'])}',
-          ),
-          if (!fresh)
-            const Text(
-              'Đang chờ dữ liệu mới. Trạng thái từng ô chưa xác định.',
-            ),
-          if (rows.isEmpty) const Text('Công việc này chưa có ô để kiểm tra.'),
-          for (final slot in rows)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('Ô ${slot['slotCode']}'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'LM393 · ${_signal(fresh, slot['flowerDetected'], 'Phát hiện vật', 'Không phát hiện vật')}',
-                  ),
-                  Text(
-                    'MC-38 · ${_signal(fresh, slot['doorClosed'], 'Báo cửa đóng', 'Báo cửa mở')}',
-                  ),
-                  Text(
-                    fresh
-                        ? (_cycleText[slot['lastCycle']] ??
-                              'Chưa có dữ liệu thao tác cửa')
-                        : 'Thao tác cửa gần nhất chưa xác định',
-                  ),
-                  if (fresh && slot['lastCycleAt'] != null)
-                    Text(dateText(slot['lastCycleAt'])),
-                ],
-              ),
-            ),
-          const Text(
-            'Nếu tín hiệu không khớp thực tế, hãy kiểm tra dây cảm biến, nam châm, nguồn khóa và cơ cấu chốt tại ô. Tủ hiện chưa đo dòng qua khóa điện.',
-          ),
-        ],
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: _loading ? null : _read,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Đọc lại tín hiệu'),
-        ),
-      ],
+      children: content,
     );
   }
+}
+
+class TechnicianKioskHealthPage extends StatelessWidget {
+  const TechnicianKioskHealthPage({required this.api, super.key});
+  final ApiClient api;
+
+  @override
+  Widget build(BuildContext context) => ApiListPage(
+    api: api,
+    path: '/api/staff/kiosk-health',
+    title: 'Sức khỏe kiosk',
+    subtitle: 'Chọn kiosk được giao để kiểm tra kết nối và các ô tủ.',
+    item: (context, row, _) => RecordCard(
+      title: valueOf(row, 'code'),
+      subtitle: valueOf(row, 'name'),
+      status: row['status'],
+      onTap: () {
+        final id = valueOf(row, 'id');
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: Text(valueOf(row, 'code'))),
+              body: SafeArea(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  children: [
+                    PageTitle(valueOf(row, 'name'), 'Tình trạng thiết bị'),
+                    TechnicianIoTHealth.forKiosk(api: api, kioskId: id),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
