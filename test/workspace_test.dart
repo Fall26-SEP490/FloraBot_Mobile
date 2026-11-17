@@ -7,6 +7,7 @@ import 'package:florabot_mobile/app.dart';
 import 'package:florabot_mobile/core/api.dart';
 import 'package:florabot_mobile/core/auth.dart';
 import 'package:florabot_mobile/core/models.dart';
+import 'package:florabot_mobile/features/technician_iot_health.dart';
 import 'package:florabot_mobile/ui/common.dart';
 
 void main() {
@@ -48,6 +49,55 @@ void main() {
       api.dispose();
     });
   }
+  testWidgets('IoT health refresh clears stale compartment observations', (
+    tester,
+  ) async {
+    var reads = 0;
+    final api = ApiClient(
+      Uri.parse('https://example.test'),
+      transport: MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/api/staff/tasks/assigned-task/iot-health');
+        return http.Response(
+          jsonEncode({
+            'isFresh': ++reads == 1,
+            'observedAt': DateTime.now().toUtc().toIso8601String(),
+            'slots': [
+              {
+                'slotCode': 'S01',
+                'flowerDetected': false,
+                'doorClosed': true,
+                'lastCycle': 'OPEN_TIMEOUT',
+              },
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(api.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [TechnicianIoTHealth(api: api, taskId: 'assigned-task')],
+          ),
+        ),
+      ),
+    );
+    expect(reads, 0);
+    await tester.tap(find.text('Sức khỏe thiết bị IoT'));
+    await tester.pumpAndSettle();
+    final timeout = find.textContaining('hết thời gian chờ tín hiệu mở');
+    expect(timeout, findsOneWidget);
+    final refresh = find.text('Đọc lại tín hiệu');
+    await tester.ensureVisible(refresh);
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(timeout, findsNothing);
+    expect(find.text('MC-38 · Chưa xác định'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('login fits a small phone and validates empty inputs', (
     tester,
   ) async {
