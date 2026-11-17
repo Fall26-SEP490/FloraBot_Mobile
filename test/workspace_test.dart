@@ -38,6 +38,7 @@ void main() {
           .map((e) => e.label)
           .toList();
       expect(labels.contains('Lắp đặt'), role == AppRole.technician);
+      expect(labels.contains('Sức khỏe'), role == AppRole.technician);
       expect(labels.contains('Tủ hoa'), role == AppRole.seller);
       expect(labels.contains('Khám phá'), role == AppRole.customer);
       if (role == AppRole.staff) {
@@ -49,6 +50,61 @@ void main() {
       api.dispose();
     });
   }
+  testWidgets('Technical kiosk health tab opens all four compartments', (
+    tester,
+  ) async {
+    final api = ApiClient(
+      Uri.parse('https://example.test'),
+      transport: MockClient((request) async {
+        final Object body = switch (request.url.path) {
+          '/api/staff/kiosk-health' => [
+            {
+              'id': 'kiosk12',
+              'code': 'K-HCM-12',
+              'name': 'Kiosk 12',
+              'status': 'ONLINE',
+            },
+          ],
+          '/api/staff/kiosk-health/kiosk12' => {
+            'kioskStatus': 'ONLINE',
+            'isFresh': true,
+            'observedAt': DateTime.now().toUtc().toIso8601String(),
+            'slots': [
+              for (var i = 1; i <= 4; i++)
+                {
+                  'slotCode': 'S0$i',
+                  'flowerDetected': i == 1,
+                  'doorClosed': true,
+                },
+            ],
+          },
+          _ => {'items': []},
+        };
+        return http.Response(jsonEncode(body), 200);
+      }),
+    );
+    final auth = AuthController(api, MemoryTokenVault())
+      ..loading = false
+      ..session = Session.fromJson({
+        'id': 'tech',
+        'name': 'Test',
+        'role': 'TECHNICIAN',
+      });
+    await tester.pumpWidget(FloraBotApp(auth: auth));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sức khỏe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('K-HCM-12'));
+    await tester.pumpAndSettle();
+    for (var slot = 1; slot <= 4; slot++) {
+      expect(find.text('Ô S0$slot'), findsOneWidget);
+    }
+    expect(find.text('LM393 · Phát hiện vật'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    auth.dispose();
+    api.dispose();
+  });
   testWidgets('IoT health refresh clears stale compartment observations', (
     tester,
   ) async {

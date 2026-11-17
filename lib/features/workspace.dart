@@ -9,6 +9,7 @@ import 'chat.dart';
 import 'inventory.dart';
 import 'orders.dart';
 import 'tasks.dart';
+import 'technician_iot_health.dart';
 
 class Workspace extends StatefulWidget {
   const Workspace(this.auth, this.session, {super.key});
@@ -24,7 +25,13 @@ class _WorkspaceState extends State<Workspace> {
   Widget build(BuildContext context) {
     final api = widget.auth.api, user = widget.session;
     final labels = switch (user.role) {
-      AppRole.technician => ['Tổng quan', 'Công việc', 'Lắp đặt', 'Tài khoản'],
+      AppRole.technician => [
+        'Tổng quan',
+        'Công việc',
+        'Lắp đặt',
+        'Sức khỏe',
+        'Tài khoản',
+      ],
       AppRole.staff => ['Tổng quan', 'Công việc', 'Tin nhắn', 'Tài khoản'],
       AppRole.seller => [
         'Tổng quan',
@@ -46,6 +53,7 @@ class _WorkspaceState extends State<Workspace> {
         Icons.grid_view_rounded,
         Icons.assignment_outlined,
         Icons.build_outlined,
+        Icons.monitor_heart_outlined,
         Icons.person_outline,
       ],
       AppRole.staff => [
@@ -80,8 +88,11 @@ class _WorkspaceState extends State<Workspace> {
       body = AccountPage(widget.auth, user);
     } else {
       body = switch (user.role) {
-        AppRole.technician =>
-          selected == 1 ? TasksPage(api, user) : InstallationsPage(api),
+        AppRole.technician => switch (selected) {
+          1 => TasksPage(api, user),
+          2 => InstallationsPage(api),
+          _ => TechnicianKioskHealthPage(api: api),
+        },
         AppRole.staff =>
           selected == 1 ? TasksPage(api, user) : ChatsPage(api, user),
         AppRole.seller =>
