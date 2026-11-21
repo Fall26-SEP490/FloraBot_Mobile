@@ -1,3 +1,4 @@
+import 'flower_advisor.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../core/api.dart';
@@ -52,6 +53,24 @@ class _CatalogPageState extends State<CatalogPage> {
     title: 'Chọn hoa, hẹn ngày nhận',
     subtitle: 'Hoa theo mẫu từ các shop, nhận tại kiosk được chọn.',
     actions: [
+      OutlinedButton.icon(
+        onPressed: () async {
+          final selected = await openPage<String>(
+            context,
+            'Gợi ý chọn hoa',
+            FlowerAdvisorPage(widget.api),
+          );
+          if (selected != null && mounted) {
+            setState(
+              () => search = selected.length > 100
+                  ? selected.substring(0, 100)
+                  : selected,
+            );
+          }
+        },
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('Gợi ý chọn hoa bằng AI'),
+      ),
       SearchBar(
         hintText: 'Tên hoa, shop...',
         leading: const Icon(Icons.search),
@@ -518,10 +537,19 @@ class _OrderDetailState extends State<OrderDetail> {
       }
     } else {
       if (loadingId == null || loadingSlotId != form['slotId']) {
-        throw const ApiError(
-          409,
-          'Lấy quyền nạp đúng ô trong phiên này trước.',
+        final recovered = objectOf(
+          await widget.api.post('/api/me/preorders/$id/loading-access', {
+            'slotId': form['slotId'],
+          }),
         );
+        loadingId = '${recovered['id']}';
+        loadingSlotId = form['slotId'];
+        if (recovered['requiresCode'] != false) {
+          throw const ApiError(
+            409,
+            'Đã gửi quyền nạp mới qua email. Nhập mã tại kiosk, nạp hoa và đóng cửa trước khi xác nhận lại.',
+          );
+        }
       }
       await widget.api.post('$base/$id/fulfill', {
         'slotId': form['slotId'],

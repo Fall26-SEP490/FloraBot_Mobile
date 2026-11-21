@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../core/chat_live.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../core/api.dart';
@@ -40,6 +42,23 @@ class ChatsPage extends StatefulWidget {
 }
 
 class _ChatsPageState extends State<ChatsPage> {
+  final refreshKey = GlobalKey<ResourceViewState>();
+  ChatLive? live;
+  @override
+  void initState() {
+    super.initState();
+    live = ChatLive(widget.api, () {
+      if (mounted) unawaited(refreshKey.currentState?.reload());
+    });
+    live!.start();
+  }
+
+  @override
+  void dispose() {
+    live?.dispose();
+    super.dispose();
+  }
+
   bool staffChats = false;
   @override
   Widget build(BuildContext context) {
@@ -52,11 +71,11 @@ class _ChatsPageState extends State<ChatsPage> {
         ? '/api/sellers/${widget.session.sellerId}/chats'
         : '/api/member/chats';
     return ApiListPage(
+      refreshKey: refreshKey,
       api: widget.api,
       path: path,
       title: 'Tin nhắn',
-      subtitle:
-          'Trao đổi đúng shop và đúng công việc. Kéo xuống để cập nhật tin mới.',
+      subtitle: 'Tin nhắn tự cập nhật khi có kết nối. Kéo xuống để tải lại.',
       actions: [
         if (role == AppRole.seller)
           SegmentedButton<bool>(
@@ -164,6 +183,17 @@ class ChatThread extends StatefulWidget {
 }
 
 class _ChatThreadState extends State<ChatThread> {
+  final resourceKey = GlobalKey<ResourceViewState>();
+  ChatLive? live;
+  @override
+  void initState() {
+    super.initState();
+    live = ChatLive(widget.api, () {
+      if (mounted && page == 1) unawaited(resourceKey.currentState?.reload());
+    });
+    live!.start();
+  }
+
   final text = TextEditingController();
   int page = 1;
   String get base => widget.staff
@@ -171,6 +201,7 @@ class _ChatThreadState extends State<ChatThread> {
       : '/api/chats/${widget.id}';
   @override
   void dispose() {
+    live?.dispose();
     text.clear();
     text.dispose();
     super.dispose();
@@ -189,6 +220,7 @@ class _ChatThreadState extends State<ChatThread> {
 
   @override
   Widget build(BuildContext context) => ResourceView(
+    key: resourceKey,
     title: widget.title,
     resourceKey: page,
     load: load,

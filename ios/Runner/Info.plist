@@ -43,10 +43,10 @@
 					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-				<key>NSCameraUsageDescription</key><string>Chụp ảnh bằng chứng công việc và hoa tại kiosk.</string><key>NSPhotoLibraryUsageDescription</key><string>Chọn ảnh để gửi bằng chứng, sản phẩm hoặc tin nhắn.</string></dict>
+				</dict>
 			</array>
-		<key>NSCameraUsageDescription</key><string>Chụp ảnh bằng chứng công việc và hoa tại kiosk.</string><key>NSPhotoLibraryUsageDescription</key><string>Chọn ảnh để gửi bằng chứng, sản phẩm hoặc tin nhắn.</string></dict>
-	<key>NSCameraUsageDescription</key><string>Chụp ảnh bằng chứng công việc và hoa tại kiosk.</string><key>NSPhotoLibraryUsageDescription</key><string>Chọn ảnh để gửi bằng chứng, sản phẩm hoặc tin nhắn.</string></dict>
+		</dict>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-<key>NSCameraUsageDescription</key><string>Chụp ảnh bằng chứng công việc và hoa tại kiosk.</string><key>NSPhotoLibraryUsageDescription</key><string>Chọn ảnh để gửi bằng chứng, sản phẩm hoặc tin nhắn.</string></dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Quét mã QR FloraBot và chụp ảnh bằng chứng công việc, hoa tại kiosk.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chọn ảnh để gửi bằng chứng, sản phẩm hoặc tin nhắn.</string>
+</dict>
 </plist>

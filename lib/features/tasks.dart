@@ -425,12 +425,21 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         });
       }
     } else {
-      final accessId = loadingAccess[request];
+      var accessId = loadingAccess[request];
       if (accessId == null) {
-        throw const ApiError(
-          409,
-          'Lấy quyền nạp trong phiên này trước khi xác nhận.',
+        final recovered = objectOf(
+          await widget.api.post('$base/loading-access', {
+            'slotId': form['slotId'],
+          }),
         );
+        accessId = '${recovered['id']}';
+        loadingAccess[request] = accessId;
+        if (recovered['requiresCode'] != false) {
+          throw const ApiError(
+            409,
+            'Đã gửi quyền nạp mới qua email. Hoàn thành nạp tại kiosk trước khi xác nhận lại.',
+          );
+        }
       }
       await widget.api.post('$base/fulfill', {
         'slotId': form['slotId'],

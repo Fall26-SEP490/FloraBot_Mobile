@@ -43,6 +43,8 @@ dependencies:
   intl: ^0.20.3
   flutter_localizations:
     sdk: flutter
+  signalr_netcore: ^1.4.4
+  mobile_scanner: ^7.5.0
 
 dev_dependencies:
   flutter_test:

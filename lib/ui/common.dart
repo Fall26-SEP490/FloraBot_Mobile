@@ -175,13 +175,31 @@ class ResourceView extends StatefulWidget {
   State<ResourceView> createState() => ResourceViewState();
 }
 
-class ResourceViewState extends State<ResourceView> {
+class ResourceViewState extends State<ResourceView>
+    with WidgetsBindingObserver {
   late Future<dynamic> future;
   bool busy = false;
   @override
   void initState() {
     super.initState();
     future = widget.load();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        mounted &&
+        !busy &&
+        (ModalRoute.of(context)?.isCurrent ?? true)) {
+      unawaited(reload());
+    }
   }
 
   @override
@@ -278,8 +296,10 @@ class ApiListPage extends StatefulWidget {
     required this.subtitle,
     required this.item,
     this.actions = const [],
+    this.refreshKey,
     super.key,
   });
+  final GlobalKey<ResourceViewState>? refreshKey;
   final ApiClient api;
   final String path, title, subtitle;
   final Widget Function(BuildContext, Json, ResourceViewState) item;
@@ -298,6 +318,7 @@ class _ApiListPageState extends State<ApiListPage> {
 
   @override
   Widget build(BuildContext context) => ResourceView(
+    key: widget.refreshKey,
     resourceKey: '${widget.path}:$page',
     load: () => widget.api.get(
       '${widget.path}${widget.path.contains('?') ? '&' : '?'}page=$page',
