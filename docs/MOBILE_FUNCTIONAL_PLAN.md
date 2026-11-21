@@ -1,6 +1,6 @@
 # FloraBot Mobile — chức năng và kế hoạch nghiệm thu
 
-Ngày: 13/11/2026. Công nghệ: Flutter, Dart, Material 3; Android/iOS, Web dùng để kiểm tra giao diện. Đây là app dùng API thật, không có tài khoản hoặc dữ liệu giả để thay thế backend.
+Ngày cập nhật: 21/11/2026. Công nghệ: Flutter, Dart, Material 3; Android/iOS, Web dùng để kiểm tra giao diện. Đây là app dùng API thật, không có tài khoản hoặc dữ liệu giả để thay thế backend.
 
 ## 1. Vai trò và giới hạn
 
@@ -46,7 +46,7 @@ Preorder là nhóm chức năng của CUSTOMER, không tạo role PREORDER mới
 3. Việc kho: lấy OTP cho START, OPEN_NEXT hoặc OPEN_FOR_CHECK theo nhiệm vụ; nhập mã trên kiosk. BE tiếp tục chặn các hành động vượt phạm vi.
 4. Việc preorder: chọn đơn/ô trong phạm vi được giao, gửi OTP nạp tới email người thực hiện; sau khi nạp và đóng cửa mới xác nhận bằng loadingAccessId. API không trả OTP email cho app.
 5. Tải ảnh bằng chứng, viết báo cáo, gửi SUBMITTED; chủ shop duyệt. Không tự nâng công việc thành hoàn thành khi API yêu cầu duyệt.
-6. Nhắn tin với chủ shop, xem tin, gửi văn bản và ảnh. Cập nhật bằng tải lại; chưa có push nền.
+6. Nhắn tin với chủ shop, xem tin, gửi văn bản và ảnh. Chat tự cập nhật qua SignalR khi app đang hoạt động; chưa có push nền.
 7. Sửa hồ sơ cá nhân, đổi mật khẩu, đăng xuất. Không có quản lý nhân viên, giá sản phẩm, doanh thu hoặc quản lý tài khoản owner.
 
 ## 5. Seller: vận hành shop
@@ -58,17 +58,22 @@ Preorder là nhóm chức năng của CUSTOMER, không tạo role PREORDER mới
 | Nạp/thu hồi/thay hoa | Cấp OTP theo session/action; mở bước kế tiếp, kiểm tra và thử lại nếu API cho phép; kiểm tra tiến độ; ghi nhận sự cố |
 | Giao việc | Tạo nhiệm vụ kho cho nhân viên theo kiosk/ô/sản phẩm; xem nhiệm vụ; duyệt/hủy theo điều kiện BE |
 | Quyền sửa chữa | Danh sách yêu cầu Technical và owner xác nhận cấp quyền |
-| Sản phẩm | Danh sách, tạo/sửa thông tin, giá, kích thước, số lượng, tags; tải ảnh |
+| Sản phẩm | Danh sách, tạo/sửa thông tin, giá, kích thước, số lượng; chọn tag loại hoa, màu sắc, chất liệu theo mã Web; tải ảnh |
 | Nhân viên | Tạo tài khoản nhân viên; xem và chuyển ACTIVE/DISABLED |
 | Preorder | Xem yêu cầu, báo giá/cập nhật/từ chối; chọn lịch; xem đơn đã thanh toán |
 | Nạp preorder | Chủ shop nạp qua OTP email hoặc giao Staff; xác nhận nạp sau chu kỳ cửa hợp lệ |
 | Nhận hoa | Gửi/gửi lại OTP 8 số tới email đăng nhập CUSTOMER qua BE; owner không được xem mã của khách |
-| Trao đổi | Chat khách hàng và chat nhân viên, ảnh và trạng thái đọc |
+| Trao đổi | Chat khách hàng và nhân viên, ảnh, trạng thái đọc; SignalR cập nhật hội thoại và danh sách khi đang mở app |
+| Phụ kiện | Tạo/sửa phụ kiện kho SHOP, nhập kho, bật/dừng bán |
+| Phản ánh chất lượng | Tiếp nhận, giao kiểm tra, lập phương án thay hoa, duyệt báo cáo, hủy phương án theo version BE |
+| Kênh thanh toán | Xem, xác minh, tạm dừng/bật lại; chỉ ADMIN gắn cấu hình payOS |
+| Hoàn tiền trực tiếp | Xem khoản hoàn, mở tài khoản nhận hoàn theo lý do; gửi ảnh chứng từ và thông tin giao dịch đã chuyển |
+| Chấm dứt thuê | Xem yêu cầu theo kiosk, gửi yêu cầu, rút yêu cầu REQUESTED đúng version |
 | Shop | Xem/sửa tên shop, điện thoại, email liên hệ |
 | Phân tích | Thống kê bán theo mùa; yêu cầu dự báo; thể hiện rõ dữ liệu thiếu/cảnh báo từ AI |
 | Gói thuê | Xem gói và kỳ thuê, yêu cầu gia hạn và mở thanh toán; quy trình thuê mới/ngoại lệ mở cổng Web để đăng nhập bình thường |
 
-Sản phẩm chưa có nút chuyển toàn bộ trạng thái khả dụng; quy trình duyệt sản phẩm, kế toán/đối soát/rút tiền, chấm dứt thuê, hồ sơ thuê mới tiếp tục trên Web. Đây là phạm vi mở rộng riêng, không giả lập bằng thao tác đổi trạng thái tại app.
+Sản phẩm chưa có nút chuyển toàn bộ trạng thái khả dụng; quy trình duyệt sản phẩm, kế toán/đối soát/rút tiền và hồ sơ thuê mới tiếp tục trên Web. Đây là phạm vi mở rộng riêng, không giả lập bằng thao tác đổi trạng thái tại app.
 
 ## 6. CUSTOMER/preorder: mua và nhận hoa
 
@@ -98,8 +103,8 @@ Chưa triển khai những thay đổi này lên server. Không đổi schema DB
 Các hạng mục chưa có trong bản này:
 
 1. Nối report-issue bảo trì thành incident và tạo/điều phối task Technical tự động. BE hiện ghi nhận báo cáo nhưng không bảo đảm sinh task. App không thể tự giải quyết SessionExpired bằng đổi nhãn FE; Manager vẫn cần quy trình xử lý hợp lệ.
-2. Khôi phục loadingAccessId sau khi đóng app: hiện ID chỉ trong màn hình; cần BE cung cấp API khôi phục phiên theo actor/task/order nếu muốn tiếp tục an toàn sau process death. Không lưu OTP để lách hạn chế này.
-3. Push FCM/APNs, badge nền, realtime chat/công việc; deep link thanh toán/reset; Google OAuth native; QR scanner và offline cache nghiệp vụ. Hiện có tải lại và trình duyệt ngoài.
+2. Khôi phục nạp preorder: khi thiếu ID cục bộ, app gọi lại loading-access đúng actor/task/order/slot. Backend trả phiên còn hiệu lực hoặc cấp mới. Phiên mới yêu cầu nhập OTP và hoàn thành chu kỳ cửa trước khi xác nhận; BE vẫn kiểm tra cửa/phiên. Không lưu OTP.
+3. Chưa có push FCM/APNs, badge nền, realtime công việc; App Links thanh toán/reset; Google OAuth native; offline cache nghiệp vụ. Chat đã có SignalR. Có quét QR cho liên kết HTTPS trên các domain FloraBot cho phép; QR được mở trong trình duyệt sau xác nhận. Khi quay lại app, ResourceView tải lại dữ liệu để kiểm tra trạng thái thật.
 4. Idempotent retry/grace khi refresh token đã bị server consume nhưng phản hồi mất trên đường truyền: hiện giữ phiên khi lỗi mạng; nếu token cũ sau đó bị server xác nhận đã dùng/hết hạn thì phải đăng nhập lại. Cần thiết kế BE riêng nếu muốn phục hồi tình huống này mà vẫn chống replay.
 5. Xác minh chính sách phát hành, icon/splash riêng, ký release, App Links, cấu hình production và đánh giá accessibility trên thiết bị thật trước store release.
 
@@ -118,3 +123,9 @@ Các hạng mục chưa có trong bản này:
 | Thiết bị | Android thật: camera/gallery/quyền/lifecycle; iPhone qua Mac: build, Keychain và quyền ảnh; mạng yếu và process death |
 
 Unit/widget tests không thay cho nghiệm thu cảm biến, email, thanh toán và thiết bị thật. Không dùng API key kiosk trong app.
+
+## Bổ sung Customer ngày 21/11/2026
+
+- Mục Khám phá có Gợi ý chọn hoa bằng AI, gọi POST /api/shop/flower-chat với mode PREORDER và ngân sách. Ba lựa chọn loại hoa/màu/chất liệu dùng cùng mã của form seller; được đưa vào câu hỏi tư vấn. Các đặc điểm được gửi trong câu hỏi tư vấn; trước khi hiển thị, app đối chiếu từng gợi ý với API catalog theo productId/kioskId, yêu cầu đủ tag đã chọn và giá hiện tại trong ngân sách. Không xác minh được thì không hiển thị gợi ý đó. Mỗi tên tìm tối đa 10 trang; không bù thêm mẫu ngoài danh sách AI. Nút Xem mẫu đưa tên gợi ý về danh mục để tiếp tục chọn/đặt.
+- Các thao tác tiền/OTP chỉ được nghiệm thu qua API staging và thiết bị thật; unit/widget tests không chứng minh thanh toán hoặc cửa.
+- Push, Google OAuth native và verified App Links chưa cấu hình theo xác nhận của chủ dự án. Không thêm Firebase credentials giả hoặc hạ quyền bảo mật để thay thế.

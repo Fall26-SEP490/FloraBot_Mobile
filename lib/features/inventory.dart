@@ -1,3 +1,4 @@
+import '../ui/product_tags.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -508,15 +509,14 @@ class ProductsPage extends StatelessWidget {
           initial: '${row?['heightCm'] ?? ''}',
           numeric: true,
         ),
-        InputSpec(
-          'tags',
-          'Nhãn, cách nhau bởi dấu phẩy',
-          initial: (row?['tags'] as List? ?? []).join(', '),
-          required: false,
-        ),
       ],
     );
-    if (form == null) return;
+    if (form == null || !context.mounted) return;
+    final tags = await chooseProductTags(
+      context,
+      List<String>.from(row?['tags'] ?? []),
+    );
+    if (tags == null) return;
     final body = {
       'name': form['name'],
       'description': form['description'],
@@ -525,11 +525,7 @@ class ProductsPage extends StatelessWidget {
       'lengthCm': dimensionInput(form['lengthCm']),
       'widthCm': dimensionInput(form['widthCm']),
       'heightCm': dimensionInput(form['heightCm']),
-      'tags': form['tags']!
-          .split(',')
-          .map((t) => t.trim())
-          .where((t) => t.isNotEmpty)
-          .toList(),
+      'tags': tags,
       if (row == null) 'kioskId': form['kioskId'],
     };
     if (row == null) {

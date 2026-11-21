@@ -1,3 +1,5 @@
+import 'qr_scanner.dart';
+import 'seller_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../core/api.dart';
@@ -155,6 +157,53 @@ class AccountPage extends StatelessWidget {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             ListTile(
+              leading: const Icon(Icons.card_giftcard),
+              title: const Text('Phụ kiện'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  openPage(context, 'Phụ kiện', AccessoriesPage(api, session)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.support_agent),
+              title: const Text('Phản ánh chất lượng'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => openPage(
+                context,
+                'Phản ánh chất lượng',
+                ComplaintsPage(api, session),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance),
+              title: const Text('Kênh thanh toán'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => openPage(
+                context,
+                'Kênh thanh toán',
+                PaymentChannelPage(api, session),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text('Hoàn tiền trực tiếp'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => openPage(
+                context,
+                'Hoàn tiền',
+                SellerRefundsPage(api, session),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.event_busy),
+              title: const Text('Chấm dứt thuê kiosk'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => openPage(
+                context,
+                'Chấm dứt thuê kiosk',
+                TerminationsPage(api, session),
+              ),
+            ),
+            ListTile(
               leading: const Icon(Icons.local_florist_outlined),
               title: const Text('Mẫu hoa và tồn tại shop'),
               trailing: const Icon(Icons.chevron_right),
@@ -210,6 +259,11 @@ class AccountPage extends StatelessWidget {
               ),
             ),
           ],
+          ListTile(
+            leading: const Icon(Icons.qr_code_scanner),
+            title: const Text('Quét QR FloraBot'),
+            onTap: () => openPage(context, 'Quét QR', const QrScannerPage()),
+          ),
           const Divider(height: 32),
           OutlinedButton.icon(
             onPressed: state.busy
