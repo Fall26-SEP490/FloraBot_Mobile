@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../core/api.dart';
 import '../core/models.dart';
 
@@ -144,10 +146,8 @@ class PageTitle extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: forest,
-          ),
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontWeight: FontWeight.w800, color: forest),
         ),
         const SizedBox(height: 6),
         Text(
@@ -560,16 +560,20 @@ Future<XFile?> chooseEvidence(BuildContext context) async {
   );
 }
 
-Future<void> showAccessCode(BuildContext context, Json access) =>
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _OtpDialog(access),
-    );
+Future<Json?> showAccessCode(
+  BuildContext context,
+  Json access, {
+  ApiClient? api,
+}) => showDialog<Json>(
+  context: context,
+  barrierDismissible: false,
+  builder: (_) => _OtpDialog(access, api),
+);
 
 class _OtpDialog extends StatefulWidget {
-  const _OtpDialog(this.access);
+  const _OtpDialog(this.access, this.api);
   final Json access;
+  final ApiClient? api;
   @override
   State<_OtpDialog> createState() => _OtpDialogState();
 }
@@ -580,6 +584,34 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
     '${widget.access['expiresAt']}',
   );
   Timer? timer;
+  final input = TextEditingController();
+  bool busy = false;
+  String? error;
+  Future<void> verify() async {
+    if (busy ||
+        !RegExp(r'^\d{6}$').hasMatch(input.text) ||
+        expires == null ||
+        !expires!.isAfter(DateTime.now()))
+      return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final result = objectOf(
+        await widget.api!.post(
+          '/api/me/maintenance-access/${widget.access['id']}/confirm',
+          {'code': input.text},
+        ),
+      );
+      if (mounted) Navigator.pop(context, result);
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -596,6 +628,7 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed && mounted) {
+      input.clear();
       setState(() => code = '');
     }
   }
@@ -603,6 +636,7 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
   @override
   void dispose() {
     code = '';
+    input.dispose();
     timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -610,7 +644,7 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Xác nhận tại kiosk'),
+    title: const Text('Xác nhận mở ô'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -627,17 +661,42 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
         Text('Hạn sử dụng: ${dateText(widget.access['expiresAt'])}'),
         const SizedBox(height: 12),
         const Text(
-          'Nhập mã tại đúng kiosk. Mã không đồng nghĩa cửa đã mở. Không chia sẻ mã cho người khác.',
+          'Đứng cạnh đúng ô tủ trước khi nhập mã. Chờ tủ phản hồi sau khi xác nhận.',
         ),
         if (widget.access['message'] != null)
           Text('${widget.access['message']}'),
+        if (widget.api != null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: input,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            enabled:
+                !busy && expires != null && expires!.isAfter(DateTime.now()),
+            decoration: const InputDecoration(labelText: 'Mã OTP 6 số'),
+            onChanged: (_) => setState(() {}),
+          ),
+          if (error != null)
+            Text(error!, style: const TextStyle(color: Colors.red)),
+        ],
       ],
     ),
     actions: [
       TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Đã hiểu'),
+        onPressed: busy ? null : () => Navigator.pop(context),
+        child: const Text('Đóng'),
       ),
+      if (widget.api != null)
+        FilledButton(
+          onPressed:
+              busy ||
+                  input.text.length != 6 ||
+                  expires == null ||
+                  !expires!.isAfter(DateTime.now())
+              ? null
+              : verify,
+          child: Text(busy ? 'Đang xác nhận…' : 'Xác nhận mở ô'),
+        ),
     ],
   );
 }

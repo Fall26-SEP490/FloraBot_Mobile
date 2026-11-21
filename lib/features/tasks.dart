@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
@@ -86,6 +87,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   final loadingAccess = <String, String>{};
   String get id => widget.task['id'] as String;
   bool get owner => widget.session.role == AppRole.seller;
+  bool get qualityTask => widget.task['workType'] == 'FLOWER_QUALITY';
   String get path => owner
       ? '/api/sellers/${widget.session.sellerId}/staff-tasks/$id'
       : '/api/staff/tasks/$id';
@@ -143,32 +145,42 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         });
         if (mounted) message(context, 'Đã gắn ảnh minh chứng vào công việc.');
       });
-  Future<void> issueInventory(ResourceViewState state, String operation) =>
-      state.run(() async {
-        String? reason;
-        if (operation == 'OPEN_FOR_CHECK') {
-          final form = await askForm(context, 'Lý do kiểm tra', [
-            const InputSpec('reason', 'Mô tả', minLength: 5, lines: 3),
-          ]);
-          if (form == null) return;
-          reason = form['reason'];
-        }
-        if (!mounted) return;
-        if (!await confirm(
-          context,
-          'Lấy mã thao tác ô?',
-          'Bạn sẽ nhập mã tại đúng kiosk của công việc này.',
-        )) {
-          return;
-        }
-        final result = objectOf(
-          await widget.api.post(
-            '/api/staff/tasks/$id/inventory-maintenance/access',
-            {'operation': operation, 'reason': reason},
-          ),
-        );
-        if (mounted) await showAccessCode(context, result);
-      });
+  Future<void> issueInventory(
+    ResourceViewState state,
+    String operation,
+  ) => state.run(() async {
+    String? reason;
+    if (operation == 'OPEN_FOR_CHECK') {
+      final form = await askForm(context, 'Lý do kiểm tra', [
+        const InputSpec('reason', 'Mô tả', minLength: 5, lines: 3),
+      ]);
+      if (form == null) return;
+      reason = form['reason'];
+    }
+    if (!mounted) return;
+    if (!await confirm(
+      context,
+      qualityTask ? 'Lấy mã thao tác ô?' : 'Mở ô được giao?',
+      qualityTask
+          ? 'Đứng cạnh đúng ô tủ và nhập mã ngay trong ứng dụng.'
+          : 'Đứng cạnh đúng ô tủ trước khi xác nhận mở.',
+    )) {
+      return;
+    }
+    final result = objectOf(
+      await widget.api.post(
+        '/api/staff/tasks/$id/inventory-maintenance/${qualityTask ? 'access' : 'open'}',
+        {'operation': operation, 'reason': reason},
+      ),
+    );
+    if (mounted) {
+      if (qualityTask) {
+        await showAccessCode(context, result, api: widget.api);
+      } else {
+        message(context, 'Đã gửi yêu cầu mở ô. Chờ tủ phản hồi.');
+      }
+    }
+  });
   @override
   Widget build(BuildContext context) => ResourceView(
     title: 'Chi tiết công việc',
@@ -230,14 +242,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             InfoBox(
-              'Thao tác: ${inventory['action']}\nTiến độ: ${statusText(inventory['sessionStage'])}\nMã chỉ có hiệu lực tại kiosk được giao.',
+              'Thao tác: ${inventory['action']}\nTiến độ: ${statusText(inventory['sessionStage'])}\nThao tác tại đúng ô tủ được giao.',
             ),
             if (active && inventory['sessionStage'] == null)
               FilledButton(
                 onPressed: state.busy
                     ? null
                     : () => issueInventory(state, 'START'),
-                child: const Text('Lấy OTP bắt đầu'),
+                child: Text(qualityTask ? 'Lấy OTP bắt đầu' : 'Mở ô'),
               ),
             if (active &&
                 inventory['sessionSubstate'] == 'RemovalClosedEmptyConfirmed')
@@ -245,14 +257,18 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                 onPressed: state.busy
                     ? null
                     : () => issueInventory(state, 'OPEN_NEXT'),
-                child: const Text('Lấy OTP nạp hoa mới'),
+                child: Text(
+                  qualityTask ? 'Lấy OTP nạp hoa mới' : 'Mở ô nạp hoa mới',
+                ),
               ),
             if (active && inventory['sessionStage'] == 'NeedsInspection')
               OutlinedButton(
                 onPressed: state.busy
                     ? null
                     : () => issueInventory(state, 'OPEN_FOR_CHECK'),
-                child: const Text('Yêu cầu OTP kiểm tra'),
+                child: Text(
+                  qualityTask ? 'Yêu cầu OTP kiểm tra' : 'Mở ô kiểm tra',
+                ),
               ),
             if (inventory['sessionStage'] == 'NeedsInspection')
               const InfoBox(
@@ -299,7 +315,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                         ),
                       );
                       if (context.mounted) {
-                        await showAccessCode(context, access);
+                        await showAccessCode(context, access, api: widget.api);
                       }
                     }),
               icon: const Icon(Icons.lock_open_outlined),
@@ -319,22 +335,27 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                   : () {
                       if (widget.session.role == AppRole.technician) {
                         state.run(() async {
-                          final form =
-                              await askForm(context, 'Gửi báo cáo sửa chữa', [
-                                const InputSpec(
-                                  'report',
-                                  'Kết quả kiểm tra / sửa',
-                                  lines: 4,
-                                  minLength: 10,
-                                ),
-                              ]);
+                          final form = await askForm(
+                            context,
+                            'Gửi báo cáo sửa chữa',
+                            [
+                              const InputSpec(
+                                'report',
+                                'Kết quả kiểm tra / sửa',
+                                lines: 4,
+                                minLength: 10,
+                              ),
+                            ],
+                          );
                           if (form == null) return;
-                          await widget.api
-                              .post('/api/staff/tasks/$id/resolve-incident', {
-                                'id': const Uuid().v4(),
-                                'version': task['version'],
-                                'report': form['report'],
-                              });
+                          await widget.api.post(
+                            '/api/staff/tasks/$id/resolve-incident',
+                            {
+                              'id': const Uuid().v4(),
+                              'version': task['version'],
+                              'report': form['report'],
+                            },
+                          );
                           if (context.mounted) {
                             message(context, 'Đã gửi để Manager kiểm tra.');
                           }
@@ -417,12 +438,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
           'slotId': form['slotId'],
         }),
       );
-      loadingAccess[request] = '${result['id']}';
       if (mounted) {
-        await showAccessCode(context, {
-          ...result,
-          'message': 'OTP đã gửi đến email của tài khoản nạp hoa.',
-        });
+        final confirmed = result['requiresCode'] == false
+            ? result
+            : await showAccessCode(context, {
+                ...result,
+                'message': 'OTP đã gửi đến email của tài khoản nạp hoa.',
+              }, api: widget.api);
+        if (confirmed != null) loadingAccess[request] = '${result['id']}';
       }
     } else {
       final accessId = loadingAccess[request];
@@ -536,15 +559,18 @@ class InstallationDetail extends StatelessWidget {
                 onPressed: state.busy
                     ? null
                     : () => state.run(() async {
-                        final form =
-                            await askForm(context, 'Gửi báo cáo nghiệm thu', [
-                              const InputSpec(
-                                'report',
-                                'Kết quả lắp đặt và kiểm tra',
-                                lines: 4,
-                                minLength: 10,
-                              ),
-                            ]);
+                        final form = await askForm(
+                          context,
+                          'Gửi báo cáo nghiệm thu',
+                          [
+                            const InputSpec(
+                              'report',
+                              'Kết quả lắp đặt và kiểm tra',
+                              lines: 4,
+                              minLength: 10,
+                            ),
+                          ],
+                        );
                         if (form != null) {
                           await api.post('$base/submit', {
                             'report': form['report'],

@@ -508,13 +508,18 @@ class _OrderDetailState extends State<OrderDetail> {
           'slotId': form['slotId'],
         }),
       );
-      loadingId = '${sent['id']}';
-      loadingSlotId = form['slotId'];
       if (mounted) {
-        await showAccessCode(context, {
-          ...sent,
-          'message': 'Kiểm tra email đăng nhập của người nạp hoa để lấy OTP.',
-        });
+        final confirmed = sent['requiresCode'] == false
+            ? sent
+            : await showAccessCode(context, {
+                ...sent,
+                'message':
+                    'Kiểm tra email đăng nhập của người nạp hoa để lấy OTP.',
+              }, api: widget.api);
+        if (confirmed != null) {
+          loadingId = '${sent['id']}';
+          loadingSlotId = form['slotId'];
+        }
       }
     } else {
       if (loadingId == null || loadingSlotId != form['slotId']) {

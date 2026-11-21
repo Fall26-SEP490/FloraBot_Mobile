@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
@@ -152,33 +153,31 @@ class _SlotDetailState extends State<SlotDetail> {
             ),
           const InputSpec('reason', 'Lý do / ghi chú', minLength: 5, lines: 3),
         ],
-        submitLabel: 'Lấy OTP thao tác',
+        submitLabel: 'Mở ô',
       );
       if (form == null) return;
       reason = form['reason']!;
       productId = form['productId'];
     } else {
-      final form = await askForm(context, 'Lấy mã thao tác tiếp theo', [
+      final form = await askForm(context, 'Mở ô để tiếp tục', [
         const InputSpec('reason', 'Lý do', minLength: 5, lines: 3),
       ]);
       if (form == null) return;
       reason = form['reason']!;
     }
     pendingSessionId ??= const Uuid().v4();
-    final result = objectOf(
-      await widget.api.post('/api/me/maintenance-access', {
-        'kioskId': kioskId,
-        'slotId': slotId,
-        'operation': operation,
-        'sessionId': current?['id'] ?? pendingSessionId,
-        'action': action ?? current?['action'],
-        'expectedBouquetId': slot['bouquetId'],
-        'productId': productId ?? current?['newProductId'],
-        'reason': reason,
-        if (operation == 'RETRY') 'requestId': const Uuid().v4(),
-      }),
-    );
-    if (mounted) await showAccessCode(context, result);
+    await widget.api.post('/api/me/maintenance-open', {
+      'kioskId': kioskId,
+      'slotId': slotId,
+      'operation': operation,
+      'sessionId': current?['id'] ?? pendingSessionId,
+      'action': action ?? current?['action'],
+      'expectedBouquetId': slot['bouquetId'],
+      'productId': productId ?? current?['newProductId'],
+      'reason': reason,
+      if (operation == 'RETRY') 'requestId': const Uuid().v4(),
+    });
+    if (mounted) message(context, 'Đã gửi yêu cầu mở ô. Chờ tủ phản hồi.');
   });
   @override
   Widget build(BuildContext context) => ResourceView(
@@ -226,7 +225,7 @@ class _SlotDetailState extends State<SlotDetail> {
                 onPressed: state.busy
                     ? null
                     : () => issue(state, slot, current, products, 'OPEN_NEXT'),
-                child: const Text('OTP nạp hoa mới'),
+                child: const Text('Mở ô nạp hoa mới'),
               ),
             if (actions.contains('open-for-check'))
               OutlinedButton(
@@ -239,7 +238,7 @@ class _SlotDetailState extends State<SlotDetail> {
                         products,
                         'OPEN_FOR_CHECK',
                       ),
-                child: const Text('OTP kiểm tra ô'),
+                child: const Text('Mở ô kiểm tra'),
               ),
             if (slot['manualRetryEnabled'] == true &&
                 current['currentCmdId'] != null &&
@@ -248,22 +247,25 @@ class _SlotDetailState extends State<SlotDetail> {
                 onPressed: state.busy
                     ? null
                     : () => issue(state, slot, current, products, 'RETRY'),
-                child: const Text('Yêu cầu OTP thử lại'),
+                child: const Text('Thử mở lại ô'),
               ),
             if (actions.contains('report-issue'))
               OutlinedButton(
                 onPressed: state.busy
                     ? null
                     : () => state.run(() async {
-                        final f =
-                            await askForm(context, 'Báo lỗi phiên thao tác', [
-                              const InputSpec(
-                                'reason',
-                                'Mô tả sự cố',
-                                minLength: 5,
-                                lines: 4,
-                              ),
-                            ]);
+                        final f = await askForm(
+                          context,
+                          'Báo lỗi phiên thao tác',
+                          [
+                            const InputSpec(
+                              'reason',
+                              'Mô tả sự cố',
+                              minLength: 5,
+                              lines: 4,
+                            ),
+                          ],
+                        );
                         if (f != null) {
                           await widget.api.post(
                             '$base/${current['id']}/report-issue',
@@ -294,7 +296,7 @@ class _SlotDetailState extends State<SlotDetail> {
                         'START',
                         action: 'LOAD',
                       ),
-                child: const Text('Lấy OTP nạp hoa'),
+                child: const Text('Mở ô nạp hoa'),
               ),
             if (['STOCKED', 'PENDING_REMOVAL'].contains(slot['status'])) ...[
               FilledButton(
@@ -308,7 +310,7 @@ class _SlotDetailState extends State<SlotDetail> {
                         'START',
                         action: 'REMOVE',
                       ),
-                child: const Text('Lấy OTP thu hồi hoa'),
+                child: const Text('Mở ô thu hồi hoa'),
               ),
               OutlinedButton(
                 onPressed: state.busy
@@ -321,7 +323,7 @@ class _SlotDetailState extends State<SlotDetail> {
                         'START',
                         action: 'REPLACE',
                       ),
-                child: const Text('Lấy OTP thay hoa'),
+                child: const Text('Mở ô thay hoa'),
               ),
             ],
           ],
@@ -339,7 +341,7 @@ class _SlotDetailState extends State<SlotDetail> {
               label: const Text('Giao ô này cho nhân viên'),
             ),
           const InfoBox(
-            'App không giữ API key thiết bị. OTP phải được xác nhận tại kiosk; cảm biến và backend quyết định kết quả thực tế.',
+            'Đứng cạnh đúng ô trước khi mở. Cảm biến xác nhận kết quả thao tác tại tủ.',
           ),
         ],
       );
