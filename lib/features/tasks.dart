@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -84,6 +85,29 @@ class TaskDetailPage extends StatefulWidget {
 }
 
 class _TaskDetailPageState extends State<TaskDetailPage> {
+  final resourceKey = GlobalKey<ResourceViewState>();
+  Timer? poll;
+  @override
+  void initState() {
+    super.initState();
+    poll = Timer.periodic(const Duration(seconds: 5), (_) {
+      final state = resourceKey.currentState;
+      if (mounted &&
+          state != null &&
+          !state.busy &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        unawaited(state.reload());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    poll?.cancel();
+    super.dispose();
+  }
+
   final loadingAccess = <String, String>{};
   String get id => widget.task['id'] as String;
   bool get owner => widget.session.role == AppRole.seller;
@@ -93,7 +117,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       : '/api/staff/tasks/$id';
   Future<Json?> optional(String endpoint) async {
     try {
-      return objectOf(await widget.api.get(endpoint));
+      final result = await widget.api.get(endpoint);
+      return result == null ? null : objectOf(result);
     } on ApiError catch (e) {
       if (e.status == 404) return null;
       rethrow;
@@ -102,14 +127,20 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   Future<Json> load() async {
     final detail = objectOf(await widget.api.get(path));
-    Json? inventory, preorders;
+    Json? inventory, preorders, quality;
     if (widget.session.role == AppRole.staff) {
+      if (qualityTask) quality = await optional('/api/staff/tasks/$id/quality');
       inventory = await optional('/api/staff/tasks/$id/inventory-maintenance');
       if (inventory == null) {
         preorders = await optional('/api/staff/tasks/$id/preorders');
       }
     }
-    return {'detail': detail, 'inventory': inventory, 'preorders': preorders};
+    return {
+      'detail': detail,
+      'inventory': inventory,
+      'preorders': preorders,
+      'quality': quality,
+    };
   }
 
   Future<void> transition(ResourceViewState state, Json task, String status) =>
@@ -183,6 +214,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   });
   @override
   Widget build(BuildContext context) => ResourceView(
+    key: resourceKey,
     title: 'Chi tiết công việc',
     load: load,
     builder: (context, response, state) {
@@ -204,6 +236,19 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             valueOf(task, 'instructions', ''),
           ),
           StatusChip(task['status']),
+          if (data['quality'] is Map) ...[
+            const Text(
+              'Phản ánh chất lượng',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            InfoBox('${data['quality']['reason']}'),
+            StatusChip(data['quality']['handlingState']),
+            if (data['quality']['replacement'] is Map)
+              InfoBox(
+                'Hoa thay: ${data['quality']['replacement']['state']} · Ô ${data['quality']['replacement']['slotCode']}',
+              ),
+          ],
+
           RecordCard(
             title: 'Địa điểm',
             subtitle: valueOf(task, 'address'),
@@ -335,27 +380,22 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                   : () {
                       if (widget.session.role == AppRole.technician) {
                         state.run(() async {
-                          final form = await askForm(
-                            context,
-                            'Gửi báo cáo sửa chữa',
-                            [
-                              const InputSpec(
-                                'report',
-                                'Kết quả kiểm tra / sửa',
-                                lines: 4,
-                                minLength: 10,
-                              ),
-                            ],
-                          );
+                          final form =
+                              await askForm(context, 'Gửi báo cáo sửa chữa', [
+                                const InputSpec(
+                                  'report',
+                                  'Kết quả kiểm tra / sửa',
+                                  lines: 4,
+                                  minLength: 10,
+                                ),
+                              ]);
                           if (form == null) return;
-                          await widget.api.post(
-                            '/api/staff/tasks/$id/resolve-incident',
-                            {
-                              'id': const Uuid().v4(),
-                              'version': task['version'],
-                              'report': form['report'],
-                            },
-                          );
+                          await widget.api
+                              .post('/api/staff/tasks/$id/resolve-incident', {
+                                'id': const Uuid().v4(),
+                                'version': task['version'],
+                                'report': form['report'],
+                              });
                           if (context.mounted) {
                             message(context, 'Đã gửi để Manager kiểm tra.');
                           }
@@ -568,18 +608,15 @@ class InstallationDetail extends StatelessWidget {
                 onPressed: state.busy
                     ? null
                     : () => state.run(() async {
-                        final form = await askForm(
-                          context,
-                          'Gửi báo cáo nghiệm thu',
-                          [
-                            const InputSpec(
-                              'report',
-                              'Kết quả lắp đặt và kiểm tra',
-                              lines: 4,
-                              minLength: 10,
-                            ),
-                          ],
-                        );
+                        final form =
+                            await askForm(context, 'Gửi báo cáo nghiệm thu', [
+                              const InputSpec(
+                                'report',
+                                'Kết quả lắp đặt và kiểm tra',
+                                lines: 4,
+                                minLength: 10,
+                              ),
+                            ]);
                         if (form != null) {
                           await api.post('$base/submit', {
                             'report': form['report'],

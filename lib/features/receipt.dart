@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
+import 'inventory.dart' show openPage;
 import '../ui/vietnam_bank_picker.dart';
 
 // Receipt possession credentials stay in memory and in HTTPS bodies/headers.
@@ -37,8 +38,13 @@ class ReceiptPage extends StatelessWidget {
             'Chờ hoàn: ${money(refunds['pendingAmount'])}\nĐã hoàn: ${money(refunds['paidAmount'])}',
           ),
           if (receipt['hasComplaint'] == true)
-            const InfoBox(
-              'Đã có khiếu nại. Liên hệ shop hoặc bộ phận hỗ trợ để theo dõi xử lý.',
+            OutlinedButton(
+              onPressed: () => openPage(
+                context,
+                'Tiến độ phản ánh',
+                CustomerComplaintPage(api, orderId, trackingToken),
+              ),
+              child: const Text('Theo dõi xử lý phản ánh'),
             ),
           if (receipt['canComplain'] == true) ...[
             InfoBox(
@@ -133,6 +139,45 @@ class ReceiptPage extends StatelessWidget {
               child: const Text('Thông tin nhận hoàn tiền'),
             ),
           ],
+        ],
+      );
+    },
+  );
+}
+
+class CustomerComplaintPage extends StatelessWidget {
+  const CustomerComplaintPage(
+    this.api,
+    this.orderId,
+    this.trackingToken, {
+    super.key,
+  });
+  final ApiClient api;
+  final String orderId, trackingToken;
+  @override
+  Widget build(BuildContext context) => ResourceView(
+    load: () => api.post('/api/receipts/complaints/lookup', {
+      'orderId': orderId,
+      'trackingToken': trackingToken,
+    }),
+    builder: (context, data, state) {
+      final item = objectOf(data);
+      final replacement = item['replacement'] is Map
+          ? objectOf(item['replacement'])
+          : null;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PageTitle('Đơn ${item['orderCode']}', valueOf(item, 'reason')),
+          StatusChip(item['handlingState']),
+          if (item['resolution'] != null) InfoBox('${item['resolution']}'),
+          if (replacement != null) ...[
+            StatusChip(replacement['state']),
+            InfoBox(
+              'Ô nhận hoa thay: ${replacement['slotCode']}\nHạn nhận: ${dateText(replacement['expiresAt'])}',
+            ),
+          ],
+
         ],
       );
     },

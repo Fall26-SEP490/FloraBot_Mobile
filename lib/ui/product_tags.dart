@@ -37,7 +37,7 @@ const productTagGroups = {
 };
 const productTagLabels = {
   'flower': 'Loại hoa',
-  'color': 'Màu sắc',
+  'color': 'Màu chủ đạo',
   'material': 'Chất liệu',
 };
 bool knownProductTag(String tag) {
@@ -51,7 +51,7 @@ Future<List<String>?> chooseProductTags(
   List<String> current,
 ) {
   final selected = current.where(knownProductTag).toSet();
-  final custom = current.where((tag) => !knownProductTag(tag)).toList();
+  var custom = current.where((tag) => !knownProductTag(tag)).toList();
   return showDialog<List<String>>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -80,6 +80,11 @@ Future<List<String>?> chooseProductTags(
                           onSelected: (value) => update(() {
                             final tag = '${group.key}:${item.key}';
                             if (value) {
+                              if (group.key == 'material') {
+                                selected.removeWhere(
+                                  (t) => t.startsWith('material:'),
+                                );
+                              }
                               selected.add(tag);
                             } else {
                               selected.remove(tag);
@@ -90,8 +95,26 @@ Future<List<String>?> chooseProductTags(
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (custom.isNotEmpty)
-                  Text('Nhãn khác đang giữ: ${custom.join(', ')}'),
+                TextFormField(
+                  initialValue: custom.join(', '),
+                  decoration: const InputDecoration(
+                    labelText: 'Từ khóa tìm kiếm',
+                    hintText: 'Ví dụ: pastel, tối giản',
+                    helperText: 'Ngăn cách từ khóa bằng dấu phẩy.',
+                  ),
+                  onChanged: (value) => update(() {
+                    custom = value
+                        .split(',')
+                        .map((t) => t.trim())
+                        .where((t) => t.isNotEmpty && !knownProductTag(t))
+                        .toSet()
+                        .toList();
+                  }),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Chọn ít nhất một loại hoa và một màu. Tối đa 20 nhãn, mỗi nhãn tối đa 64 ký tự.',
+                ),
               ],
             ),
           ),
@@ -104,6 +127,7 @@ Future<List<String>?> chooseProductTags(
           FilledButton(
             onPressed:
                 selected.length + custom.length <= 20 &&
+                    custom.every((tag) => tag.length <= 64) &&
                     selected.any((t) => t.startsWith('flower:')) &&
                     selected.any((t) => t.startsWith('color:'))
                 ? () => Navigator.pop(context, [...selected, ...custom])

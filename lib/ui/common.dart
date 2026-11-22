@@ -146,8 +146,10 @@ class PageTitle extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.w800, color: forest),
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: forest,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
@@ -210,7 +212,10 @@ class ResourceViewState extends State<ResourceView>
 
   Future<void> reload() async {
     if (!mounted) return;
-    setState(() => future = widget.load());
+    final next = widget.load();
+    setState(() {
+      future = next;
+    });
     try {
       await future;
     } catch (_) {
@@ -268,11 +273,6 @@ class ResourceViewState extends State<ResourceView>
               children: [
                 if (busy) const LinearProgressIndicator(),
                 widget.builder(context, snapshot.data, this),
-                const SizedBox(height: 16),
-                Text(
-                  'Dữ liệu từ máy chủ • Kéo xuống để cập nhật',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
               ],
             ),
           ),
@@ -612,8 +612,9 @@ class _OtpDialogState extends State<_OtpDialog> with WidgetsBindingObserver {
     if (busy ||
         !RegExp(r'^\d{6}$').hasMatch(input.text) ||
         expires == null ||
-        !expires!.isAfter(DateTime.now()))
+        !expires!.isAfter(DateTime.now())) {
       return;
+    }
     setState(() {
       busy = true;
       error = null;

@@ -1,3 +1,4 @@
+import 'package:florabot_mobile/features/inventory.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -293,4 +294,47 @@ void main() {
     expect(overBudget['suggestions'], isEmpty);
     api.dispose();
   });
+  testWidgets('slot without maintenance session accepts HTTP 204', (
+    tester,
+  ) async {
+    final api = ApiClient(
+      Uri.parse('https://example.test'),
+      transport: MockClient((r) async {
+        if (r.url.path.endsWith('/active')) return http.Response('', 204);
+        if (r.url.path.endsWith('/slots')) {
+          return jsonResponse(
+            jsonEncode([
+              {
+                'id': 's',
+                'slotCode': 'S01',
+                'zone': 'WALK_IN',
+                'sensorEnabled': true,
+                'status': 'RENTED_EMPTY',
+              },
+            ]),
+            200,
+          );
+        }
+        return jsonResponse('[]', 200);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SlotDetail(
+            api,
+            seller(),
+            {'id': 'k', 'name': 'Tủ hoa'},
+            {'id': 's', 'slotCode': 'S01'},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('FormatException'), findsNothing);
+    expect(find.text('Ô S01'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    api.dispose();
+  });
 }
+
