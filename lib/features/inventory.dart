@@ -1,3 +1,5 @@
+import '../core/slot_labels.dart';
+import 'dart:async';
 import '../ui/product_tags.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -47,6 +49,15 @@ class KiosksPage extends StatelessWidget {
       title: '${valueOf(row, 'code')} • ${valueOf(row, 'name')}',
       subtitle: valueOf(row, 'address'),
       status: row['status'],
+      trailing: IconButton(
+        tooltip: 'Vị trí kiosk',
+        icon: const Icon(Icons.location_on_outlined),
+        onPressed: () => openPage(
+          context,
+          'Vị trí kiosk',
+          KioskLocationPage(api, session, row),
+        ),
+      ),
       onTap: () =>
           openPage(context, valueOf(row, 'code'), SlotsPage(api, session, row)),
     ),
@@ -65,12 +76,11 @@ class SlotsPage extends StatelessWidget {
     title: valueOf(kiosk, 'name'),
     subtitle: valueOf(kiosk, 'address'),
     item: (context, row, state) => RecordCard(
-      title:
-          'Ô ${row['slotCode']} • ${row['zone'] == 'PREORDER' ? 'Đặt trước' : 'Walk-in'}',
+      title: 'Ô ${row['slotCode']} • ${slotZoneLabel(row['zone'])}',
       subtitle: row['bouquetId'] == null
           ? 'Chưa có bó hoa được ghi nhận'
           : 'Bó: ${row['qrCode'] ?? row['bouquetId']}',
-      status: row['status'],
+      status: slotStateLabel(row),
       onTap: () async {
         await Navigator.push(
           context,
@@ -94,6 +104,31 @@ class SlotDetail extends StatefulWidget {
 }
 
 class _SlotDetailState extends State<SlotDetail> {
+  final resourceKey = GlobalKey<ResourceViewState>();
+  Timer? poll;
+  bool activeSession = false;
+  @override
+  void initState() {
+    super.initState();
+    poll = Timer.periodic(const Duration(seconds: 3), (_) {
+      final state = resourceKey.currentState;
+      if (mounted &&
+          activeSession &&
+          state != null &&
+          !state.busy &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        unawaited(state.reload());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    poll?.cancel();
+    super.dispose();
+  }
+
   String? pendingSessionId;
   String get kioskId => '${widget.kiosk['id']}';
   String get slotId => '${widget.slot['id']}';
@@ -110,11 +145,20 @@ class _SlotDetailState extends State<SlotDetail> {
     Json? current;
     if (slot['sensorEnabled'] == true && slot['zone'] == 'WALK_IN') {
       try {
-        current = objectOf(await widget.api.get('$base/active'));
+        final active = await widget.api.get('$base/active');
+        current = active == null ? null : objectOf(active);
       } on ApiError catch (e) {
         if (e.status != 404) rethrow;
       }
     }
+    activeSession =
+        current != null &&
+        ![
+          'Completed',
+          'Recovered',
+          'SessionExpired',
+        ].contains(current['stage']);
+    if (!activeSession) pendingSessionId = null;
     final products = itemsOf(await widget.api.get('/api/me/products'));
     return {'slot': slot, 'current': current, 'products': products};
   }
@@ -182,6 +226,7 @@ class _SlotDetailState extends State<SlotDetail> {
   });
   @override
   Widget build(BuildContext context) => ResourceView(
+    key: resourceKey,
     title: 'Ô ${widget.slot['slotCode']}',
     load: load,
     builder: (context, data, state) {
@@ -194,15 +239,33 @@ class _SlotDetailState extends State<SlotDetail> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           PageTitle('Ô ${slot['slotCode']}', valueOf(widget.kiosk, 'name')),
-          StatusChip(slot['status']),
-          InfoBox(
-            'Loại ô: ${slot['zone']}\nBó hiện tại: ${slot['qrCode'] ?? 'Chưa có'}\nCảm biến: ${slot['sensorReady'] == true ? 'Đã xác minh' : 'Chưa đủ điều kiện'}',
-          ),
-          if (slot['zone'] == 'PREORDER')
-            const InfoBox(
-              'Nạp và xác nhận đơn đặt trước tại mục Đơn hàng, gắn với đúng đơn đã thanh toán.',
+          StatusChip(slotStateLabel(slot)),
+          if (slot['productId'] != null &&
+              (slot['bouquetId'] != null || slot['qrCode'] != null))
+            SlotBouquetPhoto(
+              widget.api,
+              '${slot['productId']}',
+              products: products,
             ),
+
+          InfoBox(
+            'Loại ô: ${slotZoneLabel(slot['zone'])}\nBó hiện tại: ${slot['qrCode'] ?? 'Chưa có'}\nCảm biến: ${slot['sensorReady'] == true ? 'Đã xác minh' : 'Chưa đủ điều kiện'}',
+          ),
           if (current != null) ...[
+            InfoBox(
+              current['stage'] == 'Completed' || current['stage'] == 'Recovered'
+                  ? 'Hệ thống đã xác nhận kết quả và cập nhật ô.'
+                  : current['stage'] == 'SessionExpired'
+                  ? 'Phiên đã hết hạn. Liên hệ đội vận hành để kiểm tra trạng thái thực tế.'
+                  : current['action'] == 'REPLACE' &&
+                        current['substate'] == 'RemovalClosedEmptyConfirmed'
+                  ? 'Đã lấy hoa cũ và xác nhận ô trống. Chọn Mở cửa nạp hoa mới để đặt bó mới vào ô.'
+                  : current['action'] == 'LOAD' ||
+                        current['stage'] == 'AwaitLoading'
+                  ? 'Chờ cửa mở thực tế, đặt bó hoa đã chọn vào ô rồi đóng cửa. Hệ thống tự xác nhận cảm biến.'
+                  : 'Chờ cửa mở thực tế, lấy hoa cũ ra rồi đóng cửa. Hệ thống tự xác nhận ô trống.',
+            ),
+
             RecordCard(
               title: 'Phiên ${current['action']}',
               subtitle: 'Hết hạn: ${dateText(current['expiresAt'])}',
@@ -255,18 +318,15 @@ class _SlotDetailState extends State<SlotDetail> {
                 onPressed: state.busy
                     ? null
                     : () => state.run(() async {
-                        final f = await askForm(
-                          context,
-                          'Báo lỗi phiên thao tác',
-                          [
-                            const InputSpec(
-                              'reason',
-                              'Mô tả sự cố',
-                              minLength: 5,
-                              lines: 4,
-                            ),
-                          ],
-                        );
+                        final f =
+                            await askForm(context, 'Báo lỗi phiên thao tác', [
+                              const InputSpec(
+                                'reason',
+                                'Mô tả sự cố',
+                                minLength: 5,
+                                lines: 4,
+                              ),
+                            ]);
                         if (f != null) {
                           await widget.api.post(
                             '$base/${current['id']}/report-issue',
@@ -282,9 +342,19 @@ class _SlotDetailState extends State<SlotDetail> {
                 warning: true,
               ),
           ],
+          if (slot['sensorEnabled'] != true &&
+              slot['bouquetId'] != null &&
+              ['STOCKED', 'PENDING_REMOVAL'].contains(slot['status']))
+            RemoveSlotFlower(
+              api: widget.api,
+              kioskId: kioskId,
+              slot: slot,
+              onRemoved: state.reload,
+            ),
           if ((current == null || current['stage'] == 'Completed') &&
               slot['zone'] == 'WALK_IN' &&
-              slot['sensorReady'] == true) ...[
+              slot['sensorReady'] == true &&
+              slot['sensorEnabled'] == true) ...[
             if (slot['status'] == 'RENTED_EMPTY')
               FilledButton(
                 onPressed: state.busy
@@ -341,9 +411,6 @@ class _SlotDetailState extends State<SlotDetail> {
               icon: const Icon(Icons.person_add_outlined),
               label: const Text('Giao ô này cho nhân viên'),
             ),
-          const InfoBox(
-            'Đứng cạnh đúng ô trước khi mở. Cảm biến xác nhận kết quả thao tác tại tủ.',
-          ),
         ],
       );
     },
@@ -424,7 +491,69 @@ class ProductsPage extends StatelessWidget {
             title: valueOf(row, 'name'),
             subtitle: '${money(row['price'])} • Tại shop: ${row['quantity']}',
             status: row['status'],
-            onTap: () => edit(context, state, row),
+            onTap: () async {
+              await openPage(
+                context,
+                'Mẫu hoa',
+                ResourceView(
+                  load: () => api.get('/api/me/products'),
+                  builder: (context, data, detailState) {
+                    final item = itemsOf(
+                      data,
+                    ).where((p) => p['id'] == row['id']).firstOrNull;
+                    if (item == null) {
+                      return const InfoBox('Mẫu hoa không còn khả dụng.');
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SlotBouquetPhoto(
+                          api,
+                          '${item['id']}',
+                          products: [item],
+                        ),
+                        StatusChip(item['status']),
+                        Text(
+                          '${money(item['price'])} · Tại shop: ${item['quantity']}',
+                        ),
+                        Text(valueOf(item, 'description', '')),
+                        FilledButton(
+                          onPressed: detailState.busy
+                              ? null
+                              : () => edit(context, detailState, item),
+                          child: const Text('Sửa mẫu hoa'),
+                        ),
+                        OutlinedButton(
+                          onPressed: detailState.busy
+                              ? null
+                              : () => detailState.run(() async {
+                                  final next = item['status'] == 'ACTIVE'
+                                      ? 'INACTIVE'
+                                      : 'ACTIVE';
+                                  if (await confirm(
+                                    context,
+                                    next == 'ACTIVE'
+                                        ? 'Bật bán mẫu hoa?'
+                                        : 'Dừng bán mẫu hoa?',
+                                    'Thay đổi trạng thái mẫu ${item['name']}.',
+                                  )) {
+                                    await api.post(
+                                      '/api/me/flows/set_product_status',
+                                      {'productId': item['id'], 'status': next},
+                                    );
+                                  }
+                                }),
+                          child: Text(
+                            item['status'] == 'ACTIVE' ? 'Dừng bán' : 'Bật bán',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              );
+              await state.reload();
+            },
             trailing: IconButton(
               tooltip: 'Thêm ảnh',
               onPressed: state.busy
@@ -451,26 +580,11 @@ class ProductsPage extends StatelessWidget {
     ResourceViewState state, [
     Json? row,
   ]) => state.run(() async {
-    List<Json> kiosks = [];
-    if (row == null) {
-      kiosks = itemsOf(
-        await api.get('/api/sellers/${session.sellerId}/kiosks'),
-      );
-    }
     if (!context.mounted) return;
     final form = await askForm(
       context,
       row == null ? 'Tạo mẫu hoa' : 'Sửa mẫu hoa',
       [
-        if (row == null)
-          InputSpec(
-            'kioskId',
-            'Kiosk của shop',
-            choices: {
-              for (final k in kiosks)
-                '${k['id']}': '${k['code']} - ${k['name']}',
-            },
-          ),
         InputSpec('name', 'Tên mẫu', initial: row?['name'] ?? '', minLength: 2),
         InputSpec(
           'description',
@@ -526,7 +640,6 @@ class ProductsPage extends StatelessWidget {
       'widthCm': dimensionInput(form['widthCm']),
       'heightCm': dimensionInput(form['heightCm']),
       'tags': tags,
-      if (row == null) 'kioskId': form['kioskId'],
     };
     if (row == null) {
       await api.post('/api/me/products', body);
@@ -677,4 +790,307 @@ class StaffManagementPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class SlotBouquetPhoto extends StatefulWidget {
+  const SlotBouquetPhoto(
+    this.api,
+    this.productId, {
+    required this.products,
+    super.key,
+  });
+  final ApiClient api;
+  final String productId;
+  final List<Json> products;
+  @override
+  State<SlotBouquetPhoto> createState() => _SlotBouquetPhotoState();
+}
+
+class _SlotBouquetPhotoState extends State<SlotBouquetPhoto> {
+  late Future<dynamic> photos;
+  Future<dynamic> load() =>
+      widget.api.get('/api/me/products/${widget.productId}/photos');
+  @override
+  void initState() {
+    super.initState();
+    photos = load();
+  }
+
+  @override
+  void didUpdateWidget(SlotBouquetPhoto old) {
+    super.didUpdateWidget(old);
+    if (old.productId != widget.productId) photos = load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final product = widget.products
+        .where((p) => p['id'] == widget.productId)
+        .firstOrNull;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (product != null)
+            Text(
+              valueOf(product, 'name'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          FutureBuilder<dynamic>(
+            future: photos,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const SizedBox(
+                  height: 160,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasError) {
+                return Column(
+                  children: [
+                    const Text('Chưa tải được ảnh bó hoa.'),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        photos = load();
+                      }),
+                      child: const Text('Tải lại ảnh'),
+                    ),
+                  ],
+                );
+              }
+              final items = itemsOf(snapshot.data);
+              if (items.isEmpty) {
+                return const InfoBox('Mẫu hoa này chưa có ảnh.');
+              }
+              final cover =
+                  items.where((p) => p['isCover'] == true).firstOrNull ??
+                  items.first;
+              final uri = Uri.tryParse('${cover['url']}');
+              if (uri == null ||
+                  uri.scheme != 'https' ||
+                  uri.userInfo.isNotEmpty) {
+                return const InfoBox('Ảnh mẫu hoa chưa khả dụng.');
+              }
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.network(
+                  uri.toString(),
+                  height: 240,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox(
+                    height: 120,
+                    child: Center(child: Text('Không tải được ảnh bó hoa.')),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class RemoveSlotFlower extends StatefulWidget {
+  const RemoveSlotFlower({
+    required this.api,
+    required this.kioskId,
+    required this.slot,
+    required this.onRemoved,
+    super.key,
+  });
+  final ApiClient api;
+  final String kioskId;
+  final Json slot;
+  final Future<void> Function() onRemoved;
+  @override
+  State<RemoveSlotFlower> createState() => _RemoveSlotFlowerState();
+}
+
+class _RemoveSlotFlowerState extends State<RemoveSlotFlower> {
+  final reason = TextEditingController();
+  bool confirmed = false;
+  bool busy = false;
+  String? error;
+  @override
+  void dispose() {
+    reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> remove() async {
+    if (busy || !confirmed || reason.text.trim().length < 5) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await widget.api.request(
+        'DELETE',
+        '/api/me/kiosks/${widget.kioskId}/slots/${widget.slot['id']}/bouquet',
+        body: {
+          'bouquetId': widget.slot['bouquetId'],
+          'reason': reason.text.trim(),
+          'confirmedRemoved': confirmed,
+        },
+      );
+      if (mounted) {
+        message(
+          context,
+          'Đã ghi nhận thu hồi hoa. Ô đã được làm trống và giữ nguyên hình thức bán.',
+        );
+      }
+      await widget.onRemoved();
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => error = e is ApiError && e.status == 404
+              ? 'API thu hồi chưa được triển khai trên máy chủ này.'
+              : '$e',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final held =
+        widget.slot['bouquetStatus'] == 'HELD' ||
+        widget.slot['orderStatus'] == 'AWAITING_PAYMENT';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Thu hồi hoa khỏi ô ${widget.slot['slotCode']}',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const InfoBox(
+          'Chỉ xác nhận sau khi đã lấy bó hoa thực tế khỏi ô. Hệ thống ghi lịch sử thu hồi, giữ nguyên vùng bán và thông tin đơn hàng, hoàn tiền liên quan.',
+        ),
+        if (held)
+          const InfoBox(
+            'Không thể thu hồi lúc này vì bó hoa đang được giữ cho một đơn hàng.',
+          )
+        else ...[
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: confirmed,
+            onChanged: busy
+                ? null
+                : (value) => setState(() => confirmed = value ?? false),
+            title: const Text('Tôi đã lấy hoa thực tế khỏi ô này.'),
+          ),
+          TextField(
+            controller: reason,
+            maxLength: 500,
+            maxLines: 3,
+            enabled: !busy,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Lý do thu hồi',
+              hintText: 'Nhập lý do, tối thiểu 5 ký tự',
+            ),
+          ),
+          if (error != null) InfoBox(error!, warning: true),
+          OutlinedButton(
+            onPressed: !busy && confirmed && reason.text.trim().length >= 5
+                ? remove
+                : null,
+            child: Text(busy ? 'Đang ghi nhận…' : 'Xác nhận đã lấy hoa khỏi ô'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class KioskLocationPage extends StatelessWidget {
+  const KioskLocationPage(this.api, this.session, this.kiosk, {super.key});
+  final ApiClient api;
+  final Session session;
+  final Json kiosk;
+  String get base => '/api/sellers/${session.sellerId}/kiosks/${kiosk['id']}';
+  @override
+  Widget build(BuildContext context) => ResourceView(
+    load: () => api.get('$base/location-requests'),
+    builder: (context, data, state) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PageTitle(valueOf(kiosk, 'name'), valueOf(kiosk, 'address')),
+        Text(
+          'Vĩ độ: ${kiosk['latitude'] ?? 'Chưa có'} · Kinh độ: ${kiosk['longitude'] ?? 'Chưa có'}',
+        ),
+        OutlinedButton(
+          onPressed: () => navigateAddress(valueOf(kiosk, 'address')),
+          child: const Text('Xem bản đồ'),
+        ),
+        FilledButton(
+          onPressed: state.busy
+              ? null
+              : () => state.run(() async {
+                  final form =
+                      await askForm(context, 'Đề nghị cập nhật vị trí', [
+                        InputSpec(
+                          'address',
+                          'Địa chỉ',
+                          initial: valueOf(kiosk, 'address', ''),
+                          minLength: 5,
+                        ),
+                        InputSpec(
+                          'latitude',
+                          'Vĩ độ',
+                          initial: '${kiosk['latitude'] ?? ''}',
+                        ),
+                        InputSpec(
+                          'longitude',
+                          'Kinh độ',
+                          initial: '${kiosk['longitude'] ?? ''}',
+                        ),
+                        const InputSpec(
+                          'reason',
+                          'Lý do thay đổi',
+                          minLength: 10,
+                          lines: 3,
+                        ),
+                      ]);
+                  if (form == null) return;
+                  final lat = double.tryParse(form['latitude']!),
+                      lon = double.tryParse(form['longitude']!);
+                  if (lat == null ||
+                      lon == null ||
+                      !lat.isFinite ||
+                      !lon.isFinite ||
+                      lat < -90 ||
+                      lat > 90 ||
+                      lon < -180 ||
+                      lon > 180) {
+                    throw const ApiError(400, 'Tọa độ không hợp lệ.');
+                  }
+                  await api.put('$base/location', {
+                    'address': form['address'],
+                    'latitude': lat,
+                    'longitude': lon,
+                    'reason': form['reason'],
+                  });
+                  if (context.mounted) {
+                    message(
+                      context,
+                      'Đã gửi cập nhật vị trí. Theo dõi trạng thái xét duyệt bên dưới.',
+                    );
+                  }
+                }),
+          child: const Text('Cập nhật vị trí kiosk'),
+        ),
+        for (final request in itemsOf(data))
+          RecordCard(
+            title: valueOf(request, 'address'),
+            subtitle: valueOf(request, 'reason', ''),
+            status: request['status'],
+          ),
+      ],
+    ),
+  );
 }
