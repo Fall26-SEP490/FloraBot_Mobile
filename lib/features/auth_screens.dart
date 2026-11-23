@@ -61,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: FloralBackdrop(
+    body: SizedBox.expand(
       child: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,

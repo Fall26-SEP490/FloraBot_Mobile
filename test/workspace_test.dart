@@ -41,6 +41,39 @@ void main() {
       expect(labels.contains('Sức khỏe'), role == AppRole.technician);
       expect(labels.contains('Tủ hoa'), role == AppRole.seller);
       expect(labels.contains('Khám phá'), role == AppRole.customer);
+      expect(labels.contains('Tin nhắn'), isFalse);
+      expect(
+        find.byType(DrawerButton),
+        role == AppRole.seller ? findsOneWidget : findsNothing,
+      );
+      if (role == AppRole.seller) {
+        await tester.tap(find.byType(DrawerButton));
+        await tester.pumpAndSettle();
+        expect(find.text('Vận hành shop'), findsOneWidget);
+        expect(find.text('Yêu cầu sửa chữa'), findsNothing);
+        expect(find.text('Phụ kiện'), findsNothing);
+        expect(find.text('Việc của nhân viên'), findsNothing);
+        expect(find.text('Chấm dứt thuê kiosk'), findsNothing);
+        await tester.tap(find.text('Mẫu hoa và phụ kiện'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Phụ kiện'));
+        await tester.pumpAndSettle();
+        expect(requests.any((p) => p.contains('/accessories')), isTrue);
+        expect(find.byType(Drawer), findsNothing);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
+      expect(
+        find.byTooltip('Tin nhắn'),
+        role == AppRole.technician ? findsNothing : findsOneWidget,
+      );
+      if (role != AppRole.technician) {
+        await tester.tap(find.byTooltip('Tin nhắn'));
+        await tester.pumpAndSettle();
+        expect(find.text('Tin nhắn'), findsOneWidget);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
       if (role == AppRole.staff) {
         expect(requests.every((p) => !p.startsWith('/api/sellers/')), true);
       }

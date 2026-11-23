@@ -1,15 +1,14 @@
-import 'qr_scanner.dart';
-import 'seller_tools.dart';
+export 'subscriptions.dart' show SubscriptionsPage;
+export 'insights.dart' show InsightsPage;
+
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+
 import '../core/api.dart';
 import '../core/auth.dart';
-import '../core/config.dart';
+
 import '../core/models.dart';
 import '../ui/common.dart';
 import 'auth_screens.dart';
-import 'inventory.dart';
-import 'tasks.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage(this.auth, this.session, {super.key});
@@ -17,272 +16,292 @@ class AccountPage extends StatelessWidget {
   final Session session;
   @override
   Widget build(BuildContext context) => ResourceView(
-    load: () => auth.api.get('/api/account/profile'),
+    load: () async {
+      final data = await Future.wait<dynamic>([
+        auth.api.get('/api/account/profile'),
+        if (session.role == AppRole.seller)
+          auth.api.get('/api/me/shop').catchError((Object error) => error),
+      ]);
+      return data;
+    },
     builder: (context, data, state) {
-      final row = objectOf(data), api = auth.api;
+      final results = data as List<dynamic>;
+      final row = objectOf(results.first), api = auth.api;
+      final VoidCallback? editProfile = state.busy
+          ? null
+          : () => state.run(() async {
+              final form = await askForm(context, 'Thông tin cá nhân', [
+                InputSpec(
+                  'fullName',
+                  'Họ tên',
+                  initial: valueOf(row, 'fullName', ''),
+                  minLength: 2,
+                ),
+                InputSpec(
+                  'phone',
+                  'Số điện thoại',
+                  initial: valueOf(row, 'phone', ''),
+                  required: false,
+                ),
+                InputSpec(
+                  'address',
+                  'Địa chỉ',
+                  initial: valueOf(row, 'address', ''),
+                  required: false,
+                  lines: 3,
+                ),
+              ]);
+              if (form == null) return;
+              await api.put('/api/account/profile', form);
+              await auth.revalidate();
+              if (context.mounted) message(context, 'Đã lưu hồ sơ.');
+            });
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageTitle(valueOf(row, 'fullName'), session.role.label),
-          RecordCard(
-            title: 'Email đăng nhập',
-            subtitle: valueOf(row, 'loginEmail'),
-          ),
-          RecordCard(
-            title: 'Liên hệ',
-            subtitle: '${valueOf(row, 'phone')}\n${valueOf(row, 'address')}',
-          ),
-          if (row['contactEmail'] != null)
-            InfoBox(
-              'Email liên hệ: ${row['contactEmail']}\nOTP nhận hoa vẫn gửi đến EMAIL ĐĂNG NHẬP.',
-            ),
-          OutlinedButton.icon(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final form = await askForm(context, 'Thông tin cá nhân', [
-                      InputSpec(
-                        'fullName',
-                        'Họ tên',
-                        initial: valueOf(row, 'fullName', ''),
-                        minLength: 2,
-                      ),
-                      InputSpec(
-                        'phone',
-                        'Số điện thoại',
-                        initial: valueOf(row, 'phone', ''),
-                        required: false,
-                      ),
-                      InputSpec(
-                        'address',
-                        'Địa chỉ',
-                        initial: valueOf(row, 'address', ''),
-                        required: false,
-                        lines: 3,
-                      ),
-                    ]);
-                    if (form == null) return;
-                    await api.put('/api/account/profile', form);
-                    await auth.revalidate();
-                    if (context.mounted) message(context, 'Đã lưu hồ sơ.');
-                  }),
-            icon: const Icon(Icons.edit_outlined),
-            label: const Text('Sửa hồ sơ cá nhân'),
-          ),
-          OutlinedButton(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final email = await askForm(context, 'Email liên hệ', [
-                      const InputSpec('email', 'Email mới'),
-                    ]);
-                    if (email == null) return;
-                    if (!validEmail(email['email']!)) {
-                      throw const ApiError(400, 'Email chưa hợp lệ.');
-                    }
-                    final sent = objectOf(
-                      await api.post('/api/account/contact-email', email),
-                    );
-                    if (!context.mounted) return;
-                    final code = await askForm(
-                      context,
-                      'Xác minh email liên hệ',
-                      [
-                        const InputSpec(
-                          'code',
-                          'Mã gửi qua email',
-                          minLength: 6,
-                        ),
-                      ],
-                    );
-                    if (code != null) {
-                      await api.post('/api/account/contact-email/verify', {
-                        'challengeId': sent['challengeId'],
-                        'code': code['code'],
-                      });
-                    }
-                  }),
-            child: const Text('Xác minh email liên hệ'),
-          ),
-          OutlinedButton.icon(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final form = await askForm(
-                      context,
-                      'Đổi mật khẩu',
-                      [
-                        const InputSpec(
-                          'currentPassword',
-                          'Mật khẩu hiện tại',
-                          secret: true,
-                        ),
-                        const InputSpec(
-                          'newPassword',
-                          'Mật khẩu mới',
-                          secret: true,
-                          minLength: 12,
-                        ),
-                        const InputSpec(
-                          'repeat',
-                          'Nhập lại mật khẩu mới',
-                          secret: true,
-                          minLength: 12,
-                        ),
-                      ],
-                      description:
-                          'Đổi mật khẩu sẽ yêu cầu đăng nhập lại trên các phiên cũ.',
-                    );
-                    if (form == null) return;
-                    if (!validPassword(form['newPassword']!) ||
-                        form['newPassword'] != form['repeat']) {
-                      throw const ApiError(
-                        400,
-                        'Mật khẩu mới cần ít nhất 12 ký tự, tối đa 72 byte UTF-8 và khớp ô xác nhận.',
-                      );
-                    }
-                    await api.post('/api/mobile/auth/password', {
-                      'currentPassword': form['currentPassword'],
-                      'newPassword': form['newPassword'],
-                    });
-                    await auth.logout();
-                  }),
-            icon: const Icon(Icons.password_outlined),
-            label: const Text('Đổi mật khẩu'),
-          ),
-          if (session.role == AppRole.seller) ...[
-            const Divider(height: 32),
-            const Text(
-              'Vận hành shop',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            ListTile(
-              leading: const Icon(Icons.card_giftcard),
-              title: const Text('Phụ kiện'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Phụ kiện', AccessoriesPage(api, session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: const Text('Phản ánh chất lượng'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Phản ánh chất lượng',
-                ComplaintsPage(api, session),
+          Row(
+            children: [
+              const SizedBox(width: 48),
+              const Expanded(
+                child: Text(
+                  'Hồ sơ của tôi',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: forest,
+                  ),
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_balance),
-              title: const Text('Kênh thanh toán'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Kênh thanh toán',
-                PaymentChannelPage(api, session),
+              IconButton(
+                tooltip: 'Sửa hồ sơ cá nhân',
+                onPressed: editProfile,
+                icon: const Icon(Icons.edit_outlined, size: 21),
+                color: forest,
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.payments_outlined),
-              title: const Text('Hoàn tiền trực tiếp'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Hoàn tiền',
-                SellerRefundsPage(api, session),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_busy),
-              title: const Text('Chấm dứt thuê kiosk'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Chấm dứt thuê kiosk',
-                TerminationsPage(api, session),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.local_florist_outlined),
-              title: const Text('Mẫu hoa và tồn tại shop'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Mẫu hoa', ProductsPage(api, session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.people_outline),
-              title: const Text('Nhân viên shop'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Nhân viên',
-                StaffManagementPage(api, session),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.assignment_outlined),
-              title: const Text('Việc của nhân viên'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Công việc', TasksPage(api, session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.verified_user_outlined),
-              title: const Text('Duyệt quyền sửa ô'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Quyền sửa ô', RepairApprovalsPage(api)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.storefront_outlined),
-              title: const Text('Thông tin shop'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Hồ sơ shop', ShopProfilePage(api)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.insights),
-              title: const Text('Doanh số và dự báo'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  openPage(context, 'Doanh số', InsightsPage(api, session)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_repeat),
-              title: const Text('Kỳ thuê và gia hạn kiosk'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => openPage(
-                context,
-                'Thuê kiosk',
-                SubscriptionsPage(api, session),
-              ),
-            ),
-          ],
-          ListTile(
-            leading: const Icon(Icons.qr_code_scanner),
-            title: const Text('Quét QR FloraBot'),
-            onTap: () => openPage(context, 'Quét QR', const QrScannerPage()),
+            ],
           ),
-          const Divider(height: 32),
-          OutlinedButton.icon(
-            onPressed: state.busy
-                ? null
-                : () async {
-                    try {
-                      if (await confirm(
-                        context,
-                        'Đăng xuất?',
-                        'Mã thao tác và dữ liệu trong phiên sẽ được xóa khỏi app.',
-                      )) {
+          const SizedBox(height: 16),
+          _ProfileIdentity(row: row, role: session.role.label),
+          const SizedBox(height: 20),
+          _ProfileSection(
+            padding: EdgeInsets.zero,
+            children: [
+              _ProfileAction(
+                onPressed: state.busy
+                    ? null
+                    : () => state.run(() async {
+                        final email = await askForm(context, 'Email liên hệ', [
+                          const InputSpec('email', 'Email mới'),
+                        ]);
+                        if (email == null) return;
+                        if (!validEmail(email['email']!)) {
+                          throw const ApiError(400, 'Email chưa hợp lệ.');
+                        }
+                        final sent = objectOf(
+                          await api.post('/api/account/contact-email', email),
+                        );
+                        if (!context.mounted) return;
+                        final code = await askForm(
+                          context,
+                          'Xác minh email liên hệ',
+                          [
+                            const InputSpec(
+                              'code',
+                              'Mã gửi qua email',
+                              minLength: 6,
+                            ),
+                          ],
+                        );
+                        if (code != null) {
+                          await api.post('/api/account/contact-email/verify', {
+                            'challengeId': sent['challengeId'],
+                            'code': code['code'],
+                          });
+                        }
+                      }),
+                icon: const Icon(Icons.mark_email_read_outlined),
+                label: const Text('Email liên hệ'),
+                subtitle: valueOf(row, 'contactEmail', 'Chưa thiết lập'),
+              ),
+              _ProfileAction(
+                onPressed: state.busy
+                    ? null
+                    : () => state.run(() async {
+                        final form = await askForm(
+                          context,
+                          'Đổi mật khẩu',
+                          [
+                            const InputSpec(
+                              'currentPassword',
+                              'Mật khẩu hiện tại',
+                              secret: true,
+                            ),
+                            const InputSpec(
+                              'newPassword',
+                              'Mật khẩu mới',
+                              secret: true,
+                              minLength: 12,
+                            ),
+                            const InputSpec(
+                              'repeat',
+                              'Nhập lại mật khẩu mới',
+                              secret: true,
+                              minLength: 12,
+                            ),
+                          ],
+                          description:
+                              'Đổi mật khẩu sẽ yêu cầu đăng nhập lại trên các phiên cũ.',
+                        );
+                        if (form == null) return;
+                        if (!validPassword(form['newPassword']!) ||
+                            form['newPassword'] != form['repeat']) {
+                          throw const ApiError(
+                            400,
+                            'Mật khẩu mới cần ít nhất 12 ký tự, tối đa 72 byte UTF-8 và khớp ô xác nhận.',
+                          );
+                        }
+                        await api.post('/api/mobile/auth/password', {
+                          'currentPassword': form['currentPassword'],
+                          'newPassword': form['newPassword'],
+                        });
                         await auth.logout();
-                      }
-                    } catch (e) {
-                      if (context.mounted) message(context, '$e');
-                    }
-                  },
-            icon: const Icon(Icons.logout),
-            label: const Text('Đăng xuất'),
+                      }),
+                icon: const Icon(Icons.password_outlined),
+                label: const Text('Đổi mật khẩu'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (session.role == AppRole.seller) ...[
+            _ProfileSection(
+              children: [
+                if (results[1] is Map) ...[
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Thông tin shop',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: forest,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Sửa thông tin shop',
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        onPressed: state.busy
+                            ? null
+                            : () => state.run(() async {
+                                final shop = objectOf(results[1]);
+                                final form = await askForm(
+                                  context,
+                                  'Sửa thông tin shop',
+                                  [
+                                    InputSpec(
+                                      'shopName',
+                                      'Tên shop',
+                                      initial: valueOf(shop, 'shopName', ''),
+                                      minLength: 2,
+                                    ),
+                                    InputSpec(
+                                      'phone',
+                                      'Số điện thoại',
+                                      initial: valueOf(shop, 'phone', ''),
+                                    ),
+                                    InputSpec(
+                                      'contactEmail',
+                                      'Email liên hệ',
+                                      initial: valueOf(
+                                        shop,
+                                        'contactEmail',
+                                        '',
+                                      ),
+                                      required: false,
+                                    ),
+                                  ],
+                                );
+                                if (form == null) return;
+                                await api.put('/api/me/shop', form);
+                                if (context.mounted) {
+                                  message(context, 'Đã lưu thông tin shop.');
+                                }
+                              }),
+                      ),
+                    ],
+                  ),
+                  for (final field in const [
+                    ('Tên shop', 'shopName'),
+                    ('Số điện thoại', 'phone'),
+                    ('Email liên hệ', 'contactEmail'),
+                    ('Địa chỉ đăng ký', 'address'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            field.$1,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF617568),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            valueOf(
+                                  objectOf(results[1]),
+                                  field.$2,
+                                  '',
+                                ).trim().isEmpty
+                                ? 'Chưa cập nhật'
+                                : valueOf(objectOf(results[1]), field.$2),
+                            style: const TextStyle(fontSize: 14, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                ] else ...[
+                  const Text(
+                    'Chưa tải được thông tin shop.',
+                    style: TextStyle(color: Color(0xFFB42318)),
+                  ),
+                  TextButton(
+                    onPressed: state.busy ? null : state.reload,
+                    child: const Text('Thử lại'),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          _ProfileSection(
+            padding: EdgeInsets.zero,
+            children: [
+              _ProfileAction(
+                onPressed: state.busy
+                    ? null
+                    : () async {
+                        try {
+                          if (await confirm(
+                            context,
+                            'Đăng xuất?',
+                            'Mã thao tác và dữ liệu trong phiên sẽ được xóa khỏi app.',
+                          )) {
+                            await auth.logout();
+                          }
+                        } catch (e) {
+                          if (context.mounted) message(context, '$e');
+                        }
+                      },
+                destructive: true,
+                icon: const Icon(Icons.logout),
+                label: const Text('Đăng xuất'),
+              ),
+            ],
           ),
           if (session.role == AppRole.customer)
             TextButton(
@@ -312,12 +331,164 @@ class AccountPage extends StatelessWidget {
                     }),
               child: const Text('Yêu cầu đóng tài khoản'),
             ),
-          const InfoBox(
-            'Phiên đăng nhập và quyền được máy chủ kiểm tra lại. App không lưu mật khẩu, OTP mở ô hoặc API key của kiosk.',
-          ),
         ],
       );
     },
+  );
+}
+
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({
+    required this.children,
+    this.padding = const EdgeInsets.all(16),
+  });
+  final List<Widget> children;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    clipBehavior: Clip.antiAlias,
+    child: Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    ),
+  );
+}
+
+class _ProfileIdentity extends StatelessWidget {
+  const _ProfileIdentity({required this.row, required this.role});
+  final Json row;
+  final String role;
+
+  Widget contact(IconData icon, String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 17, color: const Color(0xFF617568)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: Color(0xFF617568),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final name = valueOf(row, 'fullName', 'Tài khoản').trim();
+    final initial = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+    return _ProfileSection(
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: const Color(0xFFEAF1E7),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  color: forest,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: forest,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    role,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF617568),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        contact(
+          Icons.mail_outline_rounded,
+          valueOf(row, 'loginEmail', 'Chưa cập nhật email'),
+        ),
+        if (valueOf(row, 'phone', '').trim().isNotEmpty)
+          contact(Icons.phone_outlined, valueOf(row, 'phone')),
+        if (valueOf(row, 'address', '').trim().isNotEmpty)
+          contact(Icons.location_on_outlined, valueOf(row, 'address')),
+      ],
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.subtitle,
+    this.destructive = false,
+  });
+  final VoidCallback? onPressed;
+  final Widget icon, label;
+  final String? subtitle;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    enabled: onPressed != null,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    leading: Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: destructive ? const Color(0xFFFFF4F3) : const Color(0xFFEAF1E7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: IconTheme(data: const IconThemeData(size: 19), child: icon),
+    ),
+    title: label,
+    titleTextStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+    subtitle: subtitle == null
+        ? null
+        : Text(
+            subtitle!,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: Color(0xFF617568),
+            ),
+          ),
+    iconColor: destructive ? const Color(0xFFB42318) : forest,
+    textColor: destructive ? const Color(0xFFB42318) : forest,
+    onTap: onPressed,
   );
 }
 
@@ -332,8 +503,11 @@ class ShopProfilePage extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageTitle(valueOf(row, 'shopName'), 'Thông tin chung của shop'),
-          StatusChip(row['status']),
+          PageTitle(
+            valueOf(row, 'shopName'),
+            'Thông tin chung của shop',
+            status: StatusChip(row['status']),
+          ),
           InfoBox(
             '${valueOf(row, 'phone')}\n${valueOf(row, 'contactEmail')}\n${valueOf(row, 'address')}',
           ),
@@ -363,242 +537,6 @@ class ShopProfilePage extends StatelessWidget {
                     if (form != null) await api.put('/api/me/shop', form);
                   }),
             child: const Text('Sửa hồ sơ shop'),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-class InsightsPage extends StatefulWidget {
-  const InsightsPage(this.api, this.session, {super.key});
-  final ApiClient api;
-  final Session session;
-  @override
-  State<InsightsPage> createState() => _InsightsPageState();
-}
-
-class _InsightsPageState extends State<InsightsPage> {
-  late int year = DateTime.now().year, month = DateTime.now().month;
-  Json? forecast;
-  @override
-  Widget build(BuildContext context) => ResourceView(
-    resourceKey: '$year-$month',
-    load: () => widget.api.get(
-      '/api/sellers/${widget.session.sellerId}/ai/seasonal-sales?year=$year&month=$month',
-    ),
-    builder: (context, data, state) {
-      final row = objectOf(data);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PageTitle(
-            'Doanh số $month/$year',
-            'Dữ liệu theo sản phẩm, không tự coi dự báo là đơn hàng thực tế.',
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: RecordCard(
-                  title: '${row['totalInvoices'] ?? 0}',
-                  subtitle: 'Hóa đơn sản phẩm',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: RecordCard(
-                  title: '${row['totalUnits'] ?? 0}',
-                  subtitle: 'Số lượng bán',
-                ),
-              ),
-            ],
-          ),
-          OutlinedButton(
-            onPressed: state.busy
-                ? null
-                : () async {
-                    final form = await askForm(context, 'Chọn kỳ thống kê', [
-                      InputSpec('year', 'Năm', initial: '$year', numeric: true),
-                      InputSpec(
-                        'month',
-                        'Tháng (1-12)',
-                        initial: '$month',
-                        numeric: true,
-                      ),
-                    ]);
-                    if (form == null || !mounted) return;
-                    try {
-                      final nextYear = integerInput(form['year']),
-                          nextMonth = integerInput(form['month']);
-                      if (nextMonth > 12 ||
-                          nextYear < 2000 ||
-                          nextYear > 2100) {
-                        throw const ApiError(400, 'Kỳ thống kê chưa hợp lệ.');
-                      }
-                      setState(() {
-                        year = nextYear;
-                        month = nextMonth;
-                      });
-                    } catch (e) {
-                      if (context.mounted) message(context, '$e');
-                    }
-                  },
-            child: const Text('Đổi kỳ thống kê'),
-          ),
-          for (final item in (row['products'] as List? ?? []).map(objectOf))
-            RecordCard(
-              title: valueOf(item, 'name'),
-              subtitle:
-                  '${item['totalInvoices']} hóa đơn • ${item['totalUnits']} bó',
-            ),
-          const Divider(height: 32),
-          FilledButton.icon(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final now = DateTime.now(),
-                        target = DateTime(
-                          DateTime.now().year,
-                          DateTime.now().month + 1,
-                        );
-                    final form =
-                        await askForm(context, 'Dự báo nhu cầu theo tháng', [
-                          InputSpec(
-                            'year',
-                            'Năm dự báo',
-                            initial: '${target.year}',
-                            numeric: true,
-                          ),
-                          InputSpec(
-                            'month',
-                            'Tháng dự báo',
-                            initial: '${target.month}',
-                            numeric: true,
-                          ),
-                          InputSpec(
-                            'historyFrom',
-                            'Lịch sử từ ngày (YYYY-MM-DD)',
-                            initial: DateFormat(
-                              'yyyy-MM-dd',
-                            ).format(now.subtract(const Duration(days: 365))),
-                          ),
-                          InputSpec(
-                            'historyTo',
-                            'Lịch sử đến ngày (YYYY-MM-DD)',
-                            initial: DateFormat(
-                              'yyyy-MM-dd',
-                            ).format(now.subtract(const Duration(days: 1))),
-                          ),
-                        ]);
-                    if (form == null) return;
-                    final result = objectOf(
-                      await widget.api.post(
-                        '/api/sellers/${widget.session.sellerId}/ai/seasonal-forecast',
-                        {
-                          'year': integerInput(form['year']),
-                          'month': integerInput(form['month']),
-                          'historyFrom': form['historyFrom'],
-                          'historyTo': form['historyTo'],
-                        },
-                      ),
-                    );
-                    if (mounted) setState(() => forecast = result);
-                  }),
-            icon: const Icon(Icons.auto_graph),
-            label: const Text('Lập dự báo'),
-          ),
-          if (forecast != null) ...[
-            for (final warning in forecast!['warnings'] as List? ?? [])
-              InfoBox('$warning', warning: true),
-            for (final item in (forecast!['products'] as List? ?? []).map(
-              objectOf,
-            ))
-              RecordCard(
-                title: valueOf(item, 'name'),
-                subtitle:
-                    'Dự báo: ${item['forecastUnits'] ?? 'Chưa đủ dữ liệu'} bó\n${valueOf(item, 'explanation', '')}',
-                status: item['modelStatus'],
-              ),
-          ],
-        ],
-      );
-    },
-  );
-}
-
-class SubscriptionsPage extends StatelessWidget {
-  const SubscriptionsPage(this.api, this.session, {super.key});
-  final ApiClient api;
-  final Session session;
-  @override
-  Widget build(BuildContext context) => ResourceView(
-    load: () => api.get('/api/sellers/${session.sellerId}/subscriptions'),
-    builder: (context, data, state) {
-      final row = objectOf(data);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const PageTitle(
-            'Kỳ thuê kiosk',
-            'Mỗi kiosk có kỳ thuê và thanh toán riêng.',
-          ),
-          FilledButton.icon(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final kiosks = itemsOf(
-                      await api.get('/api/sellers/${session.sellerId}/kiosks'),
-                    );
-                    if (!context.mounted) return;
-                    final form = await askForm(context, 'Yêu cầu gia hạn', [
-                      InputSpec(
-                        'kioskId',
-                        'Kiosk',
-                        choices: {
-                          for (final k in kiosks)
-                            '${k['id']}': '${k['code']} - ${k['name']}',
-                        },
-                      ),
-                    ]);
-                    if (form == null) return;
-                    final renewal = objectOf(
-                      await api.post(
-                        '/api/me/kiosks/${form['kioskId']}/renewals',
-                      ),
-                    );
-                    if (!context.mounted) return;
-                    if (await confirm(
-                      context,
-                      'Thanh toán gia hạn?',
-                      'Phí: ${money(renewal['amount'])}\nTừ ${dateText(renewal['periodFrom'])} đến ${dateText(renewal['periodTo'])}',
-                    )) {
-                      final payment = objectOf(
-                        await api.post('${renewal['paymentLinkPath']}'),
-                      );
-                      await openSafeLink('${payment['checkoutUrl']}');
-                    }
-                  }),
-            icon: const Icon(Icons.event_repeat),
-            label: const Text('Yêu cầu gia hạn kiosk'),
-          ),
-          for (final period in (row['subscriptions'] as List? ?? []).map(
-            objectOf,
-          ))
-            RecordCard(
-              title: valueOf(period, 'packageName'),
-              subtitle:
-                  '${money(period['price'])}\n${valueOf(period, 'periodFrom')} → ${valueOf(period, 'periodTo')}',
-              status: period['status'],
-            ),
-          OutlinedButton(
-            onPressed: () async {
-              try {
-                await openSafeLink('${AppConfig.portalUrl}/seller');
-              } catch (e) {
-                if (context.mounted) message(context, '$e');
-              }
-            },
-            child: const Text('Mở cổng Web để xử lý hồ sơ thuê khác'),
           ),
         ],
       );

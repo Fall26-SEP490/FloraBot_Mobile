@@ -93,6 +93,24 @@ iOS cần macOS/Xcode, cấu hình signing và kiểm tra Keychain/camera/photo 
 
 SDK đã kiểm tra trên máy: Flutter 3.51.0-0.1.pre (master), Dart 3.13.0-103.1.beta; đây là SDK sẵn có, không nâng cấp máy. Các dependency đã khóa yêu cầu Flutter >=3.44 và Dart >=3.12 <4; pubspec ghi cùng giới hạn. Cần xác minh lại trên Flutter stable đã chọn của nhóm trước CI/phát hành.
 
+## Goong Maps trên mobile
+
+Bản đồ chọn điểm lắp đặt dùng Goong vector style qua `maplibre_gl`; tìm địa chỉ dùng Goong Places AutoComplete và Detail. `GOONG_API_KEY` (REST Places) và `GOONG_MAPTILES_KEY` (Map tiles) là hai cấu hình riêng.
+
+Cấu hình bản build bằng file theo mẫu `goong.example.json`:
+
+```powershell
+flutter run --dart-define-from-file=<file-cau-hinh-local.json>
+```
+
+Hoặc truyền trực tiếp hai biến:
+
+```powershell
+flutter run --dart-define=GOONG_API_KEY=<rest-key> --dart-define=GOONG_MAPTILES_KEY=<maptiles-key>
+```
+
+Khi phát triển cục bộ cũng có thể đặt key vào `assets/config/goong.local.json` (file này đã được `.gitignore`, không commit key thật lên repository). Sau thay đổi native SDK (Android `minSdk >= 24`, iOS `>= 15.5`, WebGL2), cần dừng app và chạy lại từ đầu (`flutter run`), hot reload không đủ.
+
 ## Hành vi mạng và OTP
 
 Mất mạng giữ phiên hiện tại; thao tác server báo lỗi và cho tải lại. Khi mở app offline với phiên lưu sẵn sẽ có màn hình chờ kết nối. Chỉ chủ động đăng xuất hoặc server xác nhận phiên hết hạn/thu hồi mới xóa phiên. Nếu một refresh bị consume trên server nhưng phản hồi mất, có thể cần đăng nhập lại sau lần xác minh kế tiếp; đây là giới hạn refresh một lần của BE, đã ghi trong kế hoạch.

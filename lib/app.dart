@@ -5,6 +5,7 @@ import 'core/auth.dart';
 import 'features/auth_screens.dart';
 import 'features/workspace.dart';
 import 'ui/common.dart';
+import 'ui/brand.dart';
 
 class FloraBotApp extends StatefulWidget {
   const FloraBotApp({required this.auth, super.key});
@@ -52,14 +53,28 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: forest),
-          scaffoldBackgroundColor: paper,
+          textTheme: const TextTheme(bodyLarge: TextStyle(fontSize: 14)),
+          scaffoldBackgroundColor: Colors.transparent,
           appBarTheme: const AppBarTheme(
             backgroundColor: paper,
+            surfaceTintColor: forest,
+            scrolledUnderElevation: 3,
             foregroundColor: forest,
             elevation: 0,
             centerTitle: false,
           ),
           inputDecorationTheme: InputDecorationTheme(
+            isDense: true,
+            labelStyle: const TextStyle(fontSize: 13),
+            hintStyle: const TextStyle(fontSize: 14),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+            ),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+            ),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -67,8 +82,8 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
               borderSide: const BorderSide(color: Color(0xFFD4E0D4)),
             ),
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
+              horizontal: 12,
+              vertical: 10,
             ),
           ),
           cardTheme: CardThemeData(
@@ -103,19 +118,28 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
             indicatorColor: Color(0xFFE3EEDC),
           ),
         ),
-        builder: (context, child) => Stack(
-          children: [
-            ?child,
-            if (hidden)
-              const Positioned.fill(
-                child: ColoredBox(
-                  color: paper,
-                  child: Center(
-                    child: Icon(Icons.local_florist, color: forest, size: 72),
+        builder: (context, child) => ColoredBox(
+          color: paper,
+          child: FloralBackdrop(
+            child: Stack(
+              children: [
+                ?child,
+                if (hidden)
+                  const Positioned.fill(
+                    child: ColoredBox(
+                      color: paper,
+                      child: Center(
+                        child: Icon(
+                          Icons.local_florist,
+                          color: forest,
+                          size: 72,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
         home: widget.auth.loading
             ? const Scaffold(body: Center(child: CircularProgressIndicator()))

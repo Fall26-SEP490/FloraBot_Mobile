@@ -111,7 +111,13 @@ class _TechnicianIoTHealthState extends State<TechnicianIoTHealth> {
       if (_failed) const Text('Chưa tải được dữ liệu IoT. Hãy thử đọc lại.'),
       if (health != null) ...[
         if (widget.wholeKiosk) ...[
-          StatusChip(health['kioskStatus']),
+          StatusHeading(
+            title: const Text(
+              'Tình trạng kiosk',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            status: StatusChip(health['kioskStatus']),
+          ),
           Text('Heartbeat gần nhất ${dateText(health['lastHeartbeatAt'])}'),
         ],
         Text(

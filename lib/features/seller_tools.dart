@@ -1,39 +1,240 @@
+export 'refunds.dart' show SellerRefundsPage, SellerRefundDetail;
+export 'complaints.dart' show ComplaintsPage, ComplaintDetail;
+export 'payment_channel.dart' show PaymentChannelPage;
+import '../ui/catalog_widgets.dart';
 import 'inventory.dart' show integerInput, openPage;
-import 'chat.dart' show PrivateImage;
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
 
-class AccessoriesPage extends StatelessWidget {
+class AccessoriesPage extends StatefulWidget {
   const AccessoriesPage(this.api, this.session, {super.key});
   final ApiClient api;
   final Session session;
-  String get base => '/api/sellers/${session.sellerId}/accessories';
+  @override
+  State<AccessoriesPage> createState() => _AccessoriesPageState();
+}
+
+class _AccessoriesPageState extends State<AccessoriesPage> {
+  ApiClient get api => widget.api;
+  String get base => '/api/sellers/${widget.session.sellerId}/accessories';
+  String query = '', filter = 'ALL';
+  final uncertainRestocks = <String>{};
+
   Future<void> edit(BuildContext context, Json? item) async {
-    final form =
-        await askForm(context, item == null ? 'Tạo phụ kiện' : 'Sửa phụ kiện', [
-          InputSpec(
-            'name',
-            'Tên phụ kiện',
-            initial: item?['name'] ?? '',
-            minLength: 2,
-          ),
-          InputSpec(
-            'price',
-            'Giá (đồng)',
-            initial: '${item?['price'] ?? ''}',
-            numeric: true,
-          ),
-        ]);
-    if (form == null) return;
-    final body = {'name': form['name'], 'price': integerInput(form['price'])};
+    final body = await showCatalogEditor(context, item: item, accessory: true);
+    if (body == null) return;
     if (item == null) {
       await api.post(base, body);
     } else {
       await api.put('$base/${item['id']}', body);
     }
+  }
+
+  bool matches(Json item) =>
+      (filter == 'ALL' || item['status'] == filter) &&
+      valueOf(item, 'name').toLowerCase().contains(query.trim().toLowerCase());
+
+  Future<void> detail(Json row, ResourceViewState listState) async {
+    await openPage(
+      context,
+      'Chi tiết phụ kiện',
+      ResourceView(
+        load: () => api.get('$base?scope=SHOP'),
+        builder: (context, data, state) {
+          final item = itemsOf(
+            data,
+          ).where((r) => r['id'] == row['id']).firstOrNull;
+          if (item == null) return const Text('Phụ kiện không còn khả dụng.');
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      StatusHeading(
+                        title: Text(
+                          valueOf(item, 'name'),
+                          style: const TextStyle(
+                            fontSize: 21,
+                            height: 1.35,
+                            fontWeight: FontWeight.w700,
+                            color: forest,
+                          ),
+                        ),
+                        status: CatalogStatus(valueOf(item, 'status')),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Giá bán',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF617568),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  money(item['price']),
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: forest,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Tồn tại shop',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF617568),
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  '${item['stockQuantity'] ?? 0}',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: forest,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: state.busy
+                    ? null
+                    : () => state.run(() => edit(context, item)),
+                icon: const Icon(Icons.edit_outlined, size: 19),
+                label: const Text('Chỉnh sửa phụ kiện'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed:
+                    state.busy || uncertainRestocks.contains('${item['id']}')
+                    ? null
+                    : () => state.run(() async {
+                        final form = await askForm(context, 'Bổ sung tồn kho', [
+                          const InputSpec(
+                            'quantity',
+                            'Số lượng thêm',
+                            numeric: true,
+                          ),
+                        ], submitLabel: 'Kiểm tra số lượng');
+                        if (form == null || !context.mounted) return;
+                        final qty = integerInput(form['quantity']);
+                        final current =
+                            (item['stockQuantity'] as num?)?.toInt() ?? 0;
+                        if (qty > 2147483647 || current + qty > 2147483647) {
+                          throw const ApiError(
+                            400,
+                            'Số lượng tồn vượt giới hạn cho phép.',
+                          );
+                        }
+                        if (!await confirm(
+                          context,
+                          'Xác nhận nhập kho?',
+                          '${item['name']}: $current + $qty = ${current + qty}.',
+                        )) {
+                          return;
+                        }
+                        try {
+                          await api.post(
+                            '/api/sellers/${widget.session.sellerId}/flows/restock_accessory',
+                            {'p_accessory': item['id'], 'p_qty': qty},
+                          );
+                        } on ApiError catch (error) {
+                          if (error.ambiguous ||
+                              error.status == 0 ||
+                              error.status >= 500) {
+                            uncertainRestocks.add('${item['id']}');
+                            throw const ApiError(
+                              0,
+                              'Chưa xác định lần nhập kho đã ghi nhận chưa. Cần đối chiếu trước khi nhập tiếp.',
+                            );
+                          }
+                          rethrow;
+                        }
+                        if (context.mounted) {
+                          message(context, 'Đã bổ sung $qty phụ kiện.');
+                        }
+                      }),
+                icon: const Icon(Icons.inventory_2_outlined, size: 19),
+                label: const Text('Bổ sung tồn kho'),
+              ),
+              if (uncertainRestocks.contains('${item['id']}'))
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'Cần đối chiếu lần nhập kho trước khi bổ sung tiếp.',
+                    style: TextStyle(color: Color(0xFFB42318)),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              OutlinedButton(
+                style: item['status'] == 'ACTIVE'
+                    ? OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFB42318),
+                      )
+                    : null,
+                onPressed: state.busy
+                    ? null
+                    : () => state.run(() async {
+                        final next = item['status'] == 'ACTIVE'
+                            ? 'INACTIVE'
+                            : 'ACTIVE';
+                        if (await confirm(
+                          context,
+                          next == 'ACTIVE'
+                              ? 'Bật bán phụ kiện?'
+                              : 'Ngừng bán phụ kiện?',
+                          valueOf(item, 'name'),
+                        )) {
+                          await api.request(
+                            'PATCH',
+                            '$base/${item['id']}/status',
+                            body: {'status': next},
+                          );
+                        }
+                      }),
+                child: Text(
+                  item['status'] == 'ACTIVE' ? 'Ngừng bán' : 'Bật bán',
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    await listState.reload();
   }
 
   @override
@@ -42,172 +243,29 @@ class AccessoriesPage extends StatelessWidget {
     builder: (context, data, state) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const PageTitle(
-          'Phụ kiện',
-          'Kho phụ kiện dùng chung cho đơn đặt trước.',
-        ),
-        FilledButton(
-          onPressed: state.busy
+        CatalogToolbar(
+          accessory: true,
+          query: query,
+          status: filter,
+          onQuery: (value) => setState(() => query = value),
+          onStatus: (value) => setState(() => filter = value),
+          onCreate: state.busy
               ? null
               : () => state.run(() => edit(context, null)),
-          child: const Text('Tạo phụ kiện'),
         ),
-        for (final item in itemsOf(data))
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${item['name']}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    '${money(item['price'])} · Tồn: ${item['stockQuantity']}',
-                  ),
-                  StatusChip(item['status']),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      TextButton(
-                        onPressed: state.busy
-                            ? null
-                            : () => state.run(() => edit(context, item)),
-                        child: const Text('Sửa'),
-                      ),
-                      TextButton(
-                        onPressed: state.busy
-                            ? null
-                            : () => state.run(() async {
-                                final form =
-                                    await askForm(context, 'Nhập kho', [
-                                      const InputSpec(
-                                        'quantity',
-                                        'Số lượng thêm',
-                                        numeric: true,
-                                      ),
-                                    ]);
-                                if (form != null) {
-                                  await api.post(
-                                    '/api/sellers/${session.sellerId}/flows/restock_accessory',
-                                    {
-                                      'p_accessory': item['id'],
-                                      'p_qty': integerInput(form['quantity']),
-                                    },
-                                  );
-                                }
-                              }),
-                        child: const Text('Nhập kho'),
-                      ),
-                      TextButton(
-                        onPressed: state.busy
-                            ? null
-                            : () => state.run(() async {
-                                final next = item['status'] == 'ACTIVE'
-                                    ? 'INACTIVE'
-                                    : 'ACTIVE';
-                                if (await confirm(
-                                  context,
-                                  'Đổi trạng thái phụ kiện?',
-                                  next == 'ACTIVE'
-                                      ? 'Bật bán phụ kiện này.'
-                                      : 'Dừng bán phụ kiện này.',
-                                )) {
-                                  await api.request(
-                                    'PATCH',
-                                    '$base/${item['id']}/status',
-                                    body: {'status': next},
-                                  );
-                                }
-                              }),
-                        child: Text(
-                          item['status'] == 'ACTIVE' ? 'Dừng bán' : 'Bật bán',
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+        if (itemsOf(data).where(matches).isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text('Không có phụ kiện phù hợp.')),
+          ),
+        for (final item in itemsOf(data).where(matches))
+          CatalogListItem(
+            item: item,
+            accessory: true,
+            onTap: () => detail(item, state),
           ),
       ],
     ),
-  );
-}
-
-class PaymentChannelPage extends StatelessWidget {
-  const PaymentChannelPage(this.api, this.session, {super.key});
-  final ApiClient api;
-  final Session session;
-  String get base => '/api/sellers/${session.sellerId}/payment-channel';
-  @override
-  Widget build(BuildContext context) => ResourceView(
-    load: () async {
-      try {
-        return await api.get(base);
-      } on ApiError catch (e) {
-        if (e.status == 404) return <String, dynamic>{};
-        rethrow;
-      }
-    },
-    builder: (context, data, state) {
-      final item = objectOf(data);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const PageTitle(
-            'Kênh thanh toán',
-            'Cấu hình và xác minh kênh nhận tiền của shop.',
-          ),
-          StatusChip(item['state']),
-          Text(
-            '${item['expectedBankName'] ?? ''} · ${item['expectedBankAccountMasked'] ?? ''}',
-          ),
-          Text('Xác minh: ${dateText(item['verifiedAt'])}'),
-          const InfoBox(
-            'Quản trị viên gắn cấu hình kênh payOS. Shop có thể xác minh, tạm dừng hoặc bật lại kênh đã được cấu hình.',
-          ),
-          OutlinedButton(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final result = objectOf(await api.post('$base/verify'));
-                    if (context.mounted) {
-                      message(context, valueOf(result, 'message'));
-                    }
-                  }),
-            child: const Text('Xác minh kênh'),
-          ),
-          if (item.isNotEmpty)
-            OutlinedButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final next = item['state'] == 'ACTIVE'
-                          ? 'PAUSED'
-                          : 'ACTIVE';
-                      if (await confirm(
-                        context,
-                        'Đổi trạng thái kênh?',
-                        next == 'PAUSED'
-                            ? 'Tạm dừng nhận thanh toán mới qua kênh này.'
-                            : 'Bật lại kênh thanh toán đã xác minh.',
-                      )) {
-                        await api.request(
-                          'PATCH',
-                          '$base/status',
-                          body: {'status': next},
-                        );
-                      }
-                    }),
-              child: Text(
-                item['state'] == 'ACTIVE' ? 'Tạm dừng kênh' : 'Bật lại kênh',
-              ),
-            ),
-        ],
-      );
-    },
   );
 }
 
@@ -260,9 +318,9 @@ class TerminationDetail extends StatelessWidget {
           PageTitle(
             valueOf(kiosk, 'name'),
             'Yêu cầu được quản lý vận hành xét duyệt.',
+            status: item.isEmpty ? null : StatusChip(item['status']),
           ),
           if (item.isNotEmpty) ...[
-            StatusChip(item['status']),
             Text(valueOf(item, 'reason')),
             Text(valueOf(item, 'reviewReason', '')),
             Text('Tiến độ: ${item['lifecycleStatus'] ?? ''}'),
@@ -313,396 +371,6 @@ class TerminationDetail extends StatelessWidget {
                       }
                     }),
               child: const Text('Rút yêu cầu'),
-            ),
-        ],
-      );
-    },
-  );
-}
-
-class ComplaintsPage extends StatelessWidget {
-  const ComplaintsPage(this.api, this.session, {super.key});
-  final ApiClient api;
-  final Session session;
-  @override
-  Widget build(BuildContext context) => ApiListPage(
-    api: api,
-    path: '/api/me/complaints',
-    title: 'Phản ánh chất lượng',
-    subtitle: 'Tiếp nhận và xử lý phản ánh của khách.',
-    item: (context, item, state) => RecordCard(
-      title: valueOf(item, 'orderCode'),
-      subtitle: valueOf(item, 'reason'),
-      status: item['status'],
-      onTap: () => openPage(
-        context,
-        'Phản ánh',
-        ComplaintDetail(api, session, '${item['id']}'),
-      ),
-    ),
-  );
-}
-
-class ComplaintDetail extends StatelessWidget {
-  const ComplaintDetail(this.api, this.session, this.id, {super.key});
-  final ApiClient api;
-  final Session session;
-  final String id;
-  String get base => '/api/me/complaints/$id';
-  @override
-  Widget build(BuildContext context) => ResourceView(
-    load: () => api.get(base),
-    builder: (context, data, state) {
-      final item = objectOf(data),
-          task = objectOf(item['task'] ?? <String, dynamic>{});
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PageTitle('Đơn ${item['orderCode']}', valueOf(item, 'reason')),
-          StatusChip(item['status']),
-          if (item['resolution'] != null) InfoBox('${item['resolution']}'),
-          for (final photo in itemsOf(item['evidence']))
-            PrivateImage(api, '${photo['url']}'),
-          if (item['status'] == 'REPORTED')
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      await api.post('$base/accept', {
-                        'version': item['version'],
-                      });
-                    }),
-              child: const Text('Tiếp nhận'),
-            ),
-          OutlinedButton(
-            onPressed: state.busy
-                ? null
-                : () => state.run(() async {
-                    final staff = itemsOf(
-                      await api.get('/api/sellers/${session.sellerId}/staff'),
-                    );
-                    if (!context.mounted) return;
-                    final form = await askForm(context, 'Giao việc kiểm tra', [
-                      InputSpec(
-                        'assigneeId',
-                        'Nhân viên',
-                        choices: {
-                          for (final s in staff)
-                            '${s['staffId']}': valueOf(s, 'name'),
-                        },
-                      ),
-                      InputSpec(
-                        'orderItemId',
-                        'Mặt hàng',
-                        choices: {
-                          for (final s in itemsOf(item['items']))
-                            '${s['orderItemId']}': valueOf(s, 'name'),
-                        },
-                      ),
-                      const InputSpec(
-                        'instructions',
-                        'Hướng dẫn',
-                        minLength: 10,
-                        lines: 3,
-                      ),
-                    ]);
-                    if (form != null) {
-                      await api.post('$base/assignment', {
-                        'version': item['version'],
-                        'taskId': const Uuid().v4(),
-                        ...form,
-                      });
-                    }
-                  }),
-            child: const Text('Giao nhân viên kiểm tra'),
-          ),
-          if (task.isNotEmpty) ...[
-            InfoBox('Công việc: ${task['status']}\n${task['report'] ?? ''}'),
-            OutlinedButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final products = itemsOf(
-                        await api.get('/api/me/products'),
-                      );
-                      final slots = itemsOf(
-                        await api.get(
-                          '/api/me/kiosks/${item['kioskId']}/slots',
-                        ),
-                      );
-                      if (!context.mounted) return;
-                      final form = await askForm(
-                        context,
-                        'Phương án thay hoa',
-                        [
-                          InputSpec(
-                            'productId',
-                            'Mẫu hoa',
-                            choices: {
-                              for (final p in products)
-                                '${p['id']}': valueOf(p, 'name'),
-                            },
-                          ),
-                          InputSpec(
-                            'slotId',
-                            'Ô tủ',
-                            choices: {
-                              for (final s in slots)
-                                '${s['id']}': valueOf(s, 'slotCode'),
-                            },
-                          ),
-                        ],
-                      );
-                      if (form != null) {
-                        await api.post('$base/replacement-plan', {
-                          'version': item['version'],
-                          'taskVersion': task['version'],
-                          ...form,
-                        });
-                      }
-                    }),
-              child: const Text('Lập phương án thay hoa'),
-            ),
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final form = await askForm(
-                        context,
-                        'Duyệt kết quả xử lý',
-                        [
-                          const InputSpec(
-                            'outcome',
-                            'Kết quả',
-                            choices: {
-                              'RETURN': 'Yêu cầu làm lại',
-                              'EXPLANATION': 'Giải thích',
-                              'REPLACEMENT': 'Duyệt thay hoa',
-                              'REFUND_REVIEW': 'Chuyển xét hoàn tiền',
-                            },
-                          ),
-                          const InputSpec(
-                            'resolution',
-                            'Nội dung xử lý',
-                            minLength: 10,
-                            lines: 4,
-                          ),
-                        ],
-                      );
-                      if (form != null) {
-                        await api.post('$base/review', {
-                          'version': item['version'],
-                          'taskVersion': task['version'],
-                          ...form,
-                        });
-                      }
-                    }),
-              child: const Text('Duyệt báo cáo'),
-            ),
-          ],
-          if (item['replacement'] != null)
-            OutlinedButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final form = await askForm(
-                        context,
-                        'Hủy phương án thay hoa',
-                        [
-                          const InputSpec(
-                            'reason',
-                            'Lý do',
-                            minLength: 10,
-                            lines: 3,
-                          ),
-                        ],
-                      );
-                      if (form != null) {
-                        await api.post('$base/replacement/cancel', {
-                          'version': item['version'],
-                          'reason': form['reason'],
-                        });
-                      }
-                    }),
-              child: const Text('Hủy phương án thay hoa'),
-            ),
-        ],
-      );
-    },
-  );
-}
-
-class SellerRefundsPage extends StatelessWidget {
-  const SellerRefundsPage(this.api, this.session, {super.key});
-  final ApiClient api;
-  final Session session;
-  @override
-  Widget build(BuildContext context) => ApiListPage(
-    api: api,
-    path: '/api/sellers/${session.sellerId}/refunds',
-    title: 'Hoàn tiền trực tiếp',
-    subtitle: 'Gửi chứng từ cho khoản đã được duyệt.',
-    item: (context, item, state) => RecordCard(
-      title: valueOf(item, 'orderCode'),
-      subtitle: money(item['amount']),
-      status: item['status'],
-      onTap: () => openPage(
-        context,
-        'Khoản hoàn',
-        SellerRefundDetail(api, session, '${item['id']}'),
-      ),
-    ),
-  );
-}
-
-class SellerRefundDetail extends StatelessWidget {
-  const SellerRefundDetail(this.api, this.session, this.id, {super.key});
-  final ApiClient api;
-  final Session session;
-  final String id;
-  String get base => '/api/sellers/${session.sellerId}/refunds/$id';
-  @override
-  Widget build(BuildContext context) => ResourceView(
-    load: () => api.get(base),
-    builder: (context, data, state) {
-      final item = objectOf(data),
-          submission = objectOf(item['submission'] ?? <String, dynamic>{});
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PageTitle('Đơn ${item['orderCode']}', money(item['amount'])),
-          StatusChip(item['status']),
-          Text(valueOf(item, 'reason', '')),
-          if (submission.isNotEmpty)
-            InfoBox(
-              'Chứng từ: ${submission['status']}\n${submission['reviewReason'] ?? ''}',
-            ),
-          if (item['canAccessBank'] == true)
-            OutlinedButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final form =
-                          await askForm(context, 'Xem tài khoản nhận hoàn', [
-                            const InputSpec(
-                              'reason',
-                              'Lý do truy cập',
-                              minLength: 10,
-                              lines: 3,
-                            ),
-                          ]);
-                      if (form == null) return;
-                      final bank = objectOf(
-                        await api.post('$base/bank-details', {
-                          'reason': form['reason'],
-                        }),
-                      );
-                      if (!context.mounted) return;
-                      await showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Tài khoản nhận hoàn'),
-                          content: Text(
-                            '${bank['bankName']}\n${bank['holder']}\n${bank['account']}',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Đóng'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-              child: const Text('Xem tài khoản nhận hoàn'),
-            ),
-          if (item['canSubmitTransfer'] == true)
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      final form = await askForm(
-                        context,
-                        'Gửi chứng từ đã chuyển tiền',
-                        [
-                          const InputSpec(
-                            'reason',
-                            'Lý do truy cập tài khoản',
-                            minLength: 10,
-                          ),
-                          const InputSpec(
-                            'providerReference',
-                            'Mã giao dịch ngân hàng',
-                            minLength: 3,
-                          ),
-                          const InputSpec(
-                            'note',
-                            'Ghi chú',
-                            required: false,
-                            lines: 3,
-                          ),
-                        ],
-                      );
-                      if (form == null || !context.mounted) return;
-                      final bank = objectOf(
-                        await api.post('$base/bank-details', {
-                          'reason': form['reason'],
-                        }),
-                      );
-                      if (!context.mounted) return;
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                      );
-                      if (date == null || !context.mounted) return;
-                      final time = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (time == null || !context.mounted) return;
-                      final transferredAt = DateTime(
-                        date.year,
-                        date.month,
-                        date.day,
-                        time.hour,
-                        time.minute,
-                      );
-                      if (transferredAt.isAfter(DateTime.now())) {
-                        throw const ApiError(
-                          400,
-                          'Thời gian chuyển không được ở tương lai.',
-                        );
-                      }
-                      final photo = await chooseEvidence(context);
-                      if (photo == null || !context.mounted) return;
-                      if (!await confirm(
-                        context,
-                        'Gửi xác nhận đã chuyển tiền?',
-                        '${money(item['amount'])}\n${bank['bankName']} · ${bank['holder']}\n${bank['account']}\nChỉ xác nhận sau khi bạn đã chuyển khoản đúng thông tin.',
-                      )) {
-                        return;
-                      }
-                      final upload = await api.upload(
-                        '$base/evidence/upload',
-                        photo,
-                      );
-                      await api.post('$base/submit-transfer', {
-                        'amount': item['amount'],
-                        'currency': 'VND',
-                        'bankName': bank['bankName'],
-                        'bankHolder': bank['holder'],
-                        'accountNumber': bank['account'],
-                        'providerReference': form['providerReference'],
-                        'transferredAt': transferredAt
-                            .toUtc()
-                            .toIso8601String(),
-                        'evidenceTicket': upload['reference'],
-                        'note': form['note'],
-                      });
-                    }),
-              child: const Text('Gửi chứng từ chuyển khoản'),
             ),
         ],
       );

@@ -103,12 +103,15 @@ class RecordCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                  StatusHeading(
+                    title: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
+                    status: status == null ? null : StatusChip(status),
                   ),
                   if (subtitle != null) ...[
                     const SizedBox(height: 7),
@@ -120,14 +123,10 @@ class RecordCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (status != null) StatusChip(status),
                 ],
               ),
             ),
-            if (trailing != null)
-              trailing!
-            else if (onTap != null)
-              const Icon(Icons.chevron_right_rounded),
+            ?trailing,
           ],
         ),
       ),
@@ -135,21 +134,51 @@ class RecordCard extends StatelessWidget {
   );
 }
 
+/// Shared top row for titles and their status, including narrow phone widths.
+class StatusHeading extends StatelessWidget {
+  const StatusHeading({required this.title, this.status, super.key});
+  final Widget title;
+  final Widget? status;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: title),
+        if (status != null) ...[
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * .45),
+            child: DefaultTextStyle.merge(
+              textAlign: TextAlign.right,
+              child: status!,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class PageTitle extends StatelessWidget {
-  const PageTitle(this.title, this.subtitle, {super.key});
+  const PageTitle(this.title, this.subtitle, {this.status, super.key});
   final String title, subtitle;
+  final Widget? status;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: forest,
+        StatusHeading(
+          title: Text(
+            title,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: forest,
+            ),
           ),
+          status: status,
         ),
         const SizedBox(height: 6),
         Text(
@@ -297,11 +326,13 @@ class ApiListPage extends StatefulWidget {
     required this.item,
     this.actions = const [],
     this.refreshKey,
+    this.showHeading = true,
     super.key,
   });
   final GlobalKey<ResourceViewState>? refreshKey;
   final ApiClient api;
   final String path, title, subtitle;
+  final bool showHeading;
   final Widget Function(BuildContext, Json, ResourceViewState) item;
   final List<Widget> actions;
   @override
@@ -329,7 +360,7 @@ class _ApiListPageState extends State<ApiListPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageTitle(widget.title, widget.subtitle),
+          if (widget.showHeading) PageTitle(widget.title, widget.subtitle),
           ...widget.actions,
           if (items.isEmpty)
             const InfoBox('Chưa có dữ liệu trong danh sách này.'),
@@ -448,6 +479,7 @@ class _InputSheetState extends State<_InputSheet> {
                 padding: const EdgeInsets.only(top: 16),
                 child: f.choices != null
                     ? DropdownButtonFormField<String>(
+                        style: Theme.of(context).textTheme.bodyLarge,
                         initialValue: f.choices!.containsKey(f.initial)
                             ? f.initial
                             : null,

@@ -10,6 +10,8 @@ import 'inventory.dart';
 import 'orders.dart';
 import 'tasks.dart';
 import 'technician_iot_health.dart';
+import 'seller_overview.dart';
+import 'seller_tools.dart';
 
 class Workspace extends StatefulWidget {
   const Workspace(this.auth, this.session, {super.key});
@@ -21,9 +23,27 @@ class Workspace extends StatefulWidget {
 
 class _WorkspaceState extends State<Workspace> {
   int selected = 0;
+
+  Future<void> _openChats(BuildContext context, ApiClient api, Session user) =>
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(
+              title: const Text(
+                'Tin nhắn',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            body: SafeArea(child: ChatsPage(api, user)),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final api = widget.auth.api, user = widget.session;
+    final hasChat = user.role != AppRole.technician;
     final labels = switch (user.role) {
       AppRole.technician => [
         'Tổng quan',
@@ -32,21 +52,9 @@ class _WorkspaceState extends State<Workspace> {
         'Sức khỏe',
         'Tài khoản',
       ],
-      AppRole.staff => ['Tổng quan', 'Công việc', 'Tin nhắn', 'Tài khoản'],
-      AppRole.seller => [
-        'Tổng quan',
-        'Tủ hoa',
-        'Đơn hàng',
-        'Tin nhắn',
-        'Tài khoản',
-      ],
-      AppRole.customer => [
-        'Tổng quan',
-        'Khám phá',
-        'Đơn đặt',
-        'Tin nhắn',
-        'Tài khoản',
-      ],
+      AppRole.staff => ['Tổng quan', 'Công việc', 'Tài khoản'],
+      AppRole.seller => ['Tổng quan', 'Tủ hoa', 'Đơn hàng', 'Tài khoản'],
+      AppRole.customer => ['Tổng quan', 'Khám phá', 'Đơn đặt', 'Tài khoản'],
     };
     final icons = switch (user.role) {
       AppRole.technician => [
@@ -59,31 +67,38 @@ class _WorkspaceState extends State<Workspace> {
       AppRole.staff => [
         Icons.grid_view_rounded,
         Icons.assignment_outlined,
-        Icons.chat_bubble_outline,
         Icons.person_outline,
       ],
       AppRole.seller => [
         Icons.grid_view_rounded,
         Icons.kitchen_outlined,
         Icons.shopping_bag_outlined,
-        Icons.chat_bubble_outline,
         Icons.person_outline,
       ],
       AppRole.customer => [
         Icons.grid_view_rounded,
         Icons.local_florist_outlined,
         Icons.shopping_bag_outlined,
-        Icons.chat_bubble_outline,
         Icons.person_outline,
       ],
     };
     Widget body;
     if (selected == 0) {
-      body = OverviewPage(
-        api,
-        user,
-        (index) => setState(() => selected = index),
-      );
+      body = user.role == AppRole.seller
+          ? SellerOverviewPage(api, user, (index) {
+              if (index == 3) {
+                _openChats(context, api, user);
+              } else {
+                setState(() => selected = index);
+              }
+            })
+          : OverviewPage(api, user, (index) {
+              if (user.role == AppRole.staff && index == 2) {
+                _openChats(context, api, user);
+              } else {
+                setState(() => selected = index);
+              }
+            });
     } else if (selected == labels.length - 1) {
       body = AccountPage(widget.auth, user);
     } else {
@@ -93,50 +108,58 @@ class _WorkspaceState extends State<Workspace> {
           2 => InstallationsPage(api),
           _ => TechnicianKioskHealthPage(api: api),
         },
-        AppRole.staff =>
-          selected == 1 ? TasksPage(api, user) : ChatsPage(api, user),
+        AppRole.staff => TasksPage(api, user),
         AppRole.seller =>
-          selected == 1
-              ? KiosksPage(api, user)
-              : selected == 2
-              ? OrdersPage(api, user)
-              : ChatsPage(api, user),
+          selected == 1 ? KiosksPage(api, user) : OrdersPage(api, user),
         AppRole.customer =>
-          selected == 1
-              ? CatalogPage(api, user)
-              : selected == 2
-              ? OrdersPage(api, user)
-              : ChatsPage(api, user),
+          selected == 1 ? CatalogPage(api, user) : OrdersPage(api, user),
       };
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Row(
-          children: [
-            Icon(Icons.local_florist_rounded),
-            SizedBox(width: 8),
-            Text('FloraBot', style: TextStyle(fontWeight: FontWeight.w800)),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Text(
-                user.role.label,
-                style: const TextStyle(fontSize: 12),
+      drawer: user.role == AppRole.seller && selected == 0
+          ? _SellerOperationsDrawer(
+              api: api,
+              user: user,
+              onOpen: (title, page) {
+                Navigator.pop(context);
+                openPage(context, title, page);
+              },
+            )
+          : null,
+      appBar: selected == 0
+          ? AppBar(
+              centerTitle: true,
+              title: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.local_florist_rounded),
+                  SizedBox(width: 8),
+                  Text(
+                    'FloraBot',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
               ),
-            ),
-          ),
-        ],
-      ),
+            )
+          : null,
       body: SafeArea(
         child: KeyedSubtree(
           key: ValueKey('${user.role}:$selected'),
           child: body,
         ),
       ),
+      floatingActionButton: hasChat
+          ? FloatingActionButton(
+              tooltip: 'Tin nhắn',
+              backgroundColor: forest,
+              foregroundColor: Colors.white,
+              shape: const CircleBorder(),
+              onPressed: () => _openChats(context, api, user),
+              child: const Icon(Icons.chat_bubble_outline_rounded),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
+        animationDuration: const Duration(milliseconds: 250),
         selectedIndex: selected,
         onDestinationSelected: (index) => setState(() => selected = index),
         destinations: [
@@ -146,6 +169,163 @@ class _WorkspaceState extends State<Workspace> {
       ),
     );
   }
+}
+
+class _SellerOperationsDrawer extends StatelessWidget {
+  const _SellerOperationsDrawer({
+    required this.api,
+    required this.user,
+    required this.onOpen,
+  });
+  final ApiClient api;
+  final Session user;
+  final void Function(String, Widget) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <(IconData, String, Widget Function())>[
+      (
+        Icons.local_florist_outlined,
+        'Mẫu hoa và phụ kiện',
+        () => _SellerSectionTabs(
+          labels: const ['Mẫu hoa', 'Phụ kiện'],
+          pages: [
+            () => ProductsPage(api, user),
+            () => AccessoriesPage(api, user),
+          ],
+        ),
+      ),
+      (
+        Icons.support_agent_outlined,
+        'Phản ánh chất lượng',
+        () => ComplaintsPage(api, user),
+      ),
+      (
+        Icons.people_outline,
+        'Nhân viên shop',
+        () => _SellerSectionTabs(
+          labels: const ['Nhân viên', 'Giao việc'],
+          pages: [
+            () => StaffManagementPage(api, user),
+            () => TasksPage(api, user),
+          ],
+        ),
+      ),
+      (
+        Icons.account_balance_outlined,
+        'Kênh thanh toán',
+        () => PaymentChannelPage(api, user),
+      ),
+      (
+        Icons.payments_outlined,
+        'Hoàn tiền trực tiếp',
+        () => SellerRefundsPage(api, user),
+      ),
+      (
+        Icons.insights_outlined,
+        'Doanh số và dự báo',
+        () => InsightsPage(api, user),
+      ),
+      (
+        Icons.event_repeat_outlined,
+        'Kỳ thuê kiosk',
+        () => _SellerSectionTabs(
+          labels: const ['Kỳ thuê & gia hạn', 'Chấm dứt thuê'],
+          pages: [
+            () => SubscriptionsPage(api, user),
+            () => TerminationsPage(api, user),
+          ],
+        ),
+      ),
+    ];
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Vận hành shop',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: forest,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Đóng menu',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, size: 22),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 20),
+                children: [
+                  for (final entry in entries)
+                    ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: Icon(entry.$1, size: 21, color: forest),
+                      title: Text(
+                        entry.$2,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      onTap: () => onOpen(entry.$2, entry.$3()),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SellerSectionTabs extends StatefulWidget {
+  const _SellerSectionTabs({required this.labels, required this.pages});
+  final List<String> labels;
+  final List<Widget Function()> pages;
+
+  @override
+  State<_SellerSectionTabs> createState() => _SellerSectionTabsState();
+}
+
+class _SellerSectionTabsState extends State<_SellerSectionTabs> {
+  int selected = 0;
+
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+    length: widget.labels.length,
+    child: Column(
+      children: [
+        TabBar(
+          labelColor: forest,
+          unselectedLabelColor: const Color(0xFF617568),
+          indicatorColor: forest,
+          dividerColor: Colors.transparent,
+          onTap: (index) => setState(() => selected = index),
+          tabs: [for (final label in widget.labels) Tab(text: label)],
+        ),
+        Expanded(
+          child: KeyedSubtree(
+            key: ValueKey(selected),
+            child: widget.pages[selected](),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class OverviewPage extends StatelessWidget {

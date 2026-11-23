@@ -96,7 +96,8 @@ void main() {
           jsonEncode({
             'id': 'c',
             'orderCode': 'O1',
-            'status': 'REPORTED',
+            'status': 'OPEN',
+            'handlingState': 'REPORTED',
             'reason': 'Hoa cần kiểm tra',
             'version': 1,
             'task': null,
@@ -142,7 +143,9 @@ void main() {
       MaterialApp(home: Scaffold(body: AccessoriesPage(api, seller()))),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dừng bán'));
+    await tester.tap(find.text('Thiệp'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Ngừng bán'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Xác nhận'));
     await tester.pumpAndSettle();
@@ -224,7 +227,8 @@ void main() {
         return jsonResponse(
           jsonEncode({
             'orderCode': 'O1',
-            'status': 'REPORTED',
+            'status': 'OPEN',
+            'handlingState': 'REPORTED',
             'reason': 'Kiểm tra',
             'version': 7,
             'task': null,
@@ -337,4 +341,3 @@ void main() {
     api.dispose();
   });
 }
-

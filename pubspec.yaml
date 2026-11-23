@@ -45,6 +45,7 @@ dependencies:
     sdk: flutter
   signalr_netcore: ^1.4.4
   mobile_scanner: ^7.5.0
+  maplibre_gl: 0.28.0
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/config/
     - assets/data/vietnam_bank_list.json
 
   # To add assets to your application, add an assets section, like this:

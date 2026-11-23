@@ -25,8 +25,8 @@ class ReceiptPage extends StatelessWidget {
           PageTitle(
             valueOf(receipt, 'orderCode'),
             dateText(receipt['createdAt']),
+            status: StatusChip(receipt['status']),
           ),
-          StatusChip(receipt['status']),
           for (final row in (receipt['items'] as List).map(objectOf))
             RecordCard(
               title: valueOf(row, 'name'),
@@ -168,16 +168,24 @@ class CustomerComplaintPage extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageTitle('Đơn ${item['orderCode']}', valueOf(item, 'reason')),
-          StatusChip(item['handlingState']),
+          PageTitle(
+            'Đơn ${item['orderCode']}',
+            valueOf(item, 'reason'),
+            status: StatusChip(item['handlingState']),
+          ),
           if (item['resolution'] != null) InfoBox('${item['resolution']}'),
           if (replacement != null) ...[
-            StatusChip(replacement['state']),
+            StatusHeading(
+              title: const Text(
+                'Hoa thay thế',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              status: StatusChip(replacement['state']),
+            ),
             InfoBox(
               'Ô nhận hoa thay: ${replacement['slotCode']}\nHạn nhận: ${dateText(replacement['expiresAt'])}',
             ),
           ],
-
         ],
       );
     },

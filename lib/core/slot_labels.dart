@@ -1,5 +1,15 @@
 import 'models.dart';
 
+bool slotOrderBlocked(Json slot) =>
+    slot['bouquetStatus'] == 'HELD' ||
+    slot['bouquetStatus'] == 'SOLD' ||
+    [
+      'AWAITING_PAYMENT',
+      'PAID',
+      'DISPENSING',
+      'DISPENSE_FAILED',
+    ].contains(slot['orderStatus']);
+
 String slotZoneLabel(dynamic zone) => switch (zone) {
   'WALK_IN' => 'Tại chỗ',
   'PREORDER' => 'Đặt trước',

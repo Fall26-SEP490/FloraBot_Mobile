@@ -84,6 +84,7 @@ class ApiClient {
     String path, {
     Json? body,
     bool authenticated = true,
+    String? idempotencyKey,
   }) async {
     final generation = _generation;
     Future<http.Response> send() => _transport
@@ -92,6 +93,7 @@ class ApiClient {
             ..headers.addAll({
               'Accept': 'application/json',
               'Content-Type': 'application/json',
+              'Idempotency-Key': ?idempotencyKey,
               if (authenticated && accessToken != null)
                 'Authorization': 'Bearer $accessToken',
             })

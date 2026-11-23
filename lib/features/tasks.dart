@@ -6,6 +6,7 @@ import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
 import 'technician_iot_health.dart';
+import 'seller_tasks.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage(this.api, this.session, {super.key});
@@ -20,6 +21,9 @@ class _TasksPageState extends State<TasksPage> {
   int revision = 0;
   @override
   Widget build(BuildContext context) {
+    if (widget.session.role == AppRole.seller) {
+      return SellerTasksPage(widget.api, widget.session);
+    }
     final owner = widget.session.role == AppRole.seller;
     final base = owner
         ? '/api/sellers/${widget.session.sellerId}/staff-tasks'
@@ -213,233 +217,259 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     }
   });
   @override
-  Widget build(BuildContext context) => ResourceView(
-    key: resourceKey,
-    title: 'Chi tiết công việc',
-    load: load,
-    builder: (context, response, state) {
-      final data = objectOf(response);
-      final detail = objectOf(data['detail']);
-      final task = {
-        ...widget.task,
-        if (detail['version'] != null) 'version': detail['version'],
-        if (detail['status'] != null) 'status': detail['status'],
-      };
-      final active = task['status'] == 'IN_PROGRESS';
-      final inventory = data['inventory'] as Json?;
-      final options = data['preorders'] as Json?;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PageTitle(
-            valueOf(task, 'kioskName'),
-            valueOf(task, 'instructions', ''),
-          ),
-          StatusChip(task['status']),
-          if (data['quality'] is Map) ...[
-            const Text(
-              'Phản ánh chất lượng',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            InfoBox('${data['quality']['reason']}'),
-            StatusChip(data['quality']['handlingState']),
-            if (data['quality']['replacement'] is Map)
-              InfoBox(
-                'Hoa thay: ${data['quality']['replacement']['state']} · Ô ${data['quality']['replacement']['slotCode']}',
-              ),
-          ],
+  Widget build(BuildContext context) => owner
+      ? SellerTaskDetailPage(widget.api, widget.session, widget.task)
+      : ResourceView(
+          key: resourceKey,
+          title: 'Chi tiết công việc',
+          load: load,
+          builder: (context, response, state) {
+            final data = objectOf(response);
+            final detail = objectOf(data['detail']);
+            final task = {
+              ...widget.task,
+              if (detail['version'] != null) 'version': detail['version'],
+              if (detail['status'] != null) 'status': detail['status'],
+            };
+            final active = task['status'] == 'IN_PROGRESS';
+            final inventory = data['inventory'] as Json?;
+            final options = data['preorders'] as Json?;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PageTitle(
+                  valueOf(task, 'kioskName'),
+                  valueOf(task, 'instructions', ''),
+                  status: StatusChip(task['status']),
+                ),
+                if (data['quality'] is Map) ...[
+                  StatusHeading(
+                    title: const Text(
+                      'Phản ánh chất lượng',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    status: StatusChip(data['quality']['handlingState']),
+                  ),
+                  InfoBox('${data['quality']['reason']}'),
+                  if (data['quality']['replacement'] is Map)
+                    InfoBox(
+                      'Hoa thay: ${data['quality']['replacement']['state']} · Ô ${data['quality']['replacement']['slotCode']}',
+                    ),
+                ],
 
-          RecordCard(
-            title: 'Địa điểm',
-            subtitle: valueOf(task, 'address'),
-            onTap: () =>
-                state.run(() => navigateAddress(valueOf(task, 'address'))),
-          ),
-          Text(
-            'Tủ: ${statusText(detail['kioskStatus'])} • Tín hiệu: ${dateText(detail['lastHeartbeatAt'])}',
-          ),
-          if (detail['slotCode'] != null)
-            InfoBox(
-              'Ô ${detail['slotCode']} • ${statusText(detail['slotStatus'])}',
-            ),
-          if (widget.session.role == AppRole.technician)
-            TechnicianIoTHealth(api: widget.api, taskId: id),
-          if (detail['incident'] is Map)
-            InfoBox(
-              valueOf(
-                objectOf(detail['incident']),
-                'reason',
-                'Kiểm tra thông tin sự cố theo công việc.',
-              ),
-            ),
-          if (!owner && task['status'] == 'ASSIGNED')
-            FilledButton.icon(
-              onPressed: state.busy
-                  ? null
-                  : () => transition(state, task, 'IN_PROGRESS'),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Bắt đầu công việc'),
-            ),
-          if (inventory != null) ...[
-            const Divider(height: 32),
-            Text(
-              'Thao tác ô ${inventory['slotCode']}',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            InfoBox(
-              'Thao tác: ${inventory['action']}\nTiến độ: ${statusText(inventory['sessionStage'])}\nThao tác tại đúng ô tủ được giao.',
-            ),
-            if (active && inventory['sessionStage'] == null)
-              FilledButton(
-                onPressed: state.busy
-                    ? null
-                    : () => issueInventory(state, 'START'),
-                child: Text(qualityTask ? 'Lấy OTP bắt đầu' : 'Mở ô'),
-              ),
-            if (active &&
-                inventory['sessionSubstate'] == 'RemovalClosedEmptyConfirmed')
-              FilledButton(
-                onPressed: state.busy
-                    ? null
-                    : () => issueInventory(state, 'OPEN_NEXT'),
-                child: Text(
-                  qualityTask ? 'Lấy OTP nạp hoa mới' : 'Mở ô nạp hoa mới',
+                RecordCard(
+                  title: 'Địa điểm',
+                  subtitle: valueOf(task, 'address'),
+                  onTap: () => state.run(
+                    () => navigateAddress(valueOf(task, 'address')),
+                  ),
                 ),
-              ),
-            if (active && inventory['sessionStage'] == 'NeedsInspection')
-              OutlinedButton(
-                onPressed: state.busy
-                    ? null
-                    : () => issueInventory(state, 'OPEN_FOR_CHECK'),
-                child: Text(
-                  qualityTask ? 'Yêu cầu OTP kiểm tra' : 'Mở ô kiểm tra',
+                Text(
+                  'Tủ: ${statusText(detail['kioskStatus'])} • Tín hiệu: ${dateText(detail['lastHeartbeatAt'])}',
                 ),
-              ),
-            if (inventory['sessionStage'] == 'NeedsInspection')
-              const InfoBox(
-                'Chưa xác nhận được kết quả. Liên hệ chủ shop; không coi ô đã trống hoặc nạp xong.',
-                warning: true,
-              ),
-          ],
-          if (options != null && active) ...[
-            const Divider(height: 32),
-            const Text(
-              'Đơn preorder được giao',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            for (final order in (options['preorders'] as List? ?? []).map(
-              objectOf,
-            ))
-              RecordCard(
-                title: valueOf(order, 'productName'),
-                subtitle:
-                    '${valueOf(order, 'orderCode')} • ${dateText(order['pickupAt'])}',
-                onTap: state.busy
-                    ? null
-                    : () => staffPreorder(state, order, options),
-              ),
-          ],
-          if (!owner &&
-              widget.session.role == AppRole.technician &&
-              active) ...[
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: state.busy
-                  ? null
-                  : () => state.run(() async {
-                      if (!await confirm(
-                        context,
-                        'Yêu cầu mã sửa ô?',
-                        'Chủ shop phải duyệt quyền trước. Backend sẽ kiểm tra lại đúng công việc và trạng thái ô.',
-                      )) {
-                        return;
-                      }
-                      final access = objectOf(
-                        await widget.api.post(
-                          '/api/staff/tasks/$id/repair-access',
-                        ),
-                      );
-                      if (context.mounted) {
-                        await showAccessCode(context, access, api: widget.api);
-                      }
-                    }),
-              icon: const Icon(Icons.lock_open_outlined),
-              label: const Text('Lấy OTP sửa ô'),
-            ),
-          ],
-          if (!owner && active) ...[
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: state.busy ? null : () => evidence(state, task),
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: const Text('Thêm ảnh minh chứng'),
-            ),
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () {
-                      if (widget.session.role == AppRole.technician) {
-                        state.run(() async {
-                          final form =
-                              await askForm(context, 'Gửi báo cáo sửa chữa', [
-                                const InputSpec(
-                                  'report',
-                                  'Kết quả kiểm tra / sửa',
-                                  lines: 4,
-                                  minLength: 10,
-                                ),
-                              ]);
-                          if (form == null) return;
-                          await widget.api
-                              .post('/api/staff/tasks/$id/resolve-incident', {
-                                'id': const Uuid().v4(),
-                                'version': task['version'],
-                                'report': form['report'],
+                if (detail['slotCode'] != null)
+                  InfoBox(
+                    'Ô ${detail['slotCode']} • ${statusText(detail['slotStatus'])}',
+                  ),
+                if (widget.session.role == AppRole.technician)
+                  TechnicianIoTHealth(api: widget.api, taskId: id),
+                if (detail['incident'] is Map)
+                  InfoBox(
+                    valueOf(
+                      objectOf(detail['incident']),
+                      'reason',
+                      'Kiểm tra thông tin sự cố theo công việc.',
+                    ),
+                  ),
+                if (!owner && task['status'] == 'ASSIGNED')
+                  FilledButton.icon(
+                    onPressed: state.busy
+                        ? null
+                        : () => transition(state, task, 'IN_PROGRESS'),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Bắt đầu công việc'),
+                  ),
+                if (inventory != null) ...[
+                  const Divider(height: 32),
+                  Text(
+                    'Thao tác ô ${inventory['slotCode']}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  InfoBox(
+                    'Thao tác: ${inventory['action']}\nTiến độ: ${statusText(inventory['sessionStage'])}\nThao tác tại đúng ô tủ được giao.',
+                  ),
+                  if (active && inventory['sessionStage'] == null)
+                    FilledButton(
+                      onPressed: state.busy
+                          ? null
+                          : () => issueInventory(state, 'START'),
+                      child: Text(qualityTask ? 'Lấy OTP bắt đầu' : 'Mở ô'),
+                    ),
+                  if (active &&
+                      inventory['sessionSubstate'] ==
+                          'RemovalClosedEmptyConfirmed')
+                    FilledButton(
+                      onPressed: state.busy
+                          ? null
+                          : () => issueInventory(state, 'OPEN_NEXT'),
+                      child: Text(
+                        qualityTask
+                            ? 'Lấy OTP nạp hoa mới'
+                            : 'Mở ô nạp hoa mới',
+                      ),
+                    ),
+                  if (active && inventory['sessionStage'] == 'NeedsInspection')
+                    OutlinedButton(
+                      onPressed: state.busy
+                          ? null
+                          : () => issueInventory(state, 'OPEN_FOR_CHECK'),
+                      child: Text(
+                        qualityTask ? 'Yêu cầu OTP kiểm tra' : 'Mở ô kiểm tra',
+                      ),
+                    ),
+                  if (inventory['sessionStage'] == 'NeedsInspection')
+                    const InfoBox(
+                      'Chưa xác nhận được kết quả. Liên hệ chủ shop; không coi ô đã trống hoặc nạp xong.',
+                      warning: true,
+                    ),
+                ],
+                if (options != null && active) ...[
+                  const Divider(height: 32),
+                  const Text(
+                    'Đơn preorder được giao',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  for (final order in (options['preorders'] as List? ?? []).map(
+                    objectOf,
+                  ))
+                    RecordCard(
+                      title: valueOf(order, 'productName'),
+                      subtitle:
+                          '${valueOf(order, 'orderCode')} • ${dateText(order['pickupAt'])}',
+                      onTap: state.busy
+                          ? null
+                          : () => staffPreorder(state, order, options),
+                    ),
+                ],
+                if (!owner &&
+                    widget.session.role == AppRole.technician &&
+                    active) ...[
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: state.busy
+                        ? null
+                        : () => state.run(() async {
+                            if (!await confirm(
+                              context,
+                              'Yêu cầu mã sửa ô?',
+                              'Chủ shop phải duyệt quyền trước. Backend sẽ kiểm tra lại đúng công việc và trạng thái ô.',
+                            )) {
+                              return;
+                            }
+                            final access = objectOf(
+                              await widget.api.post(
+                                '/api/staff/tasks/$id/repair-access',
+                              ),
+                            );
+                            if (context.mounted) {
+                              await showAccessCode(
+                                context,
+                                access,
+                                api: widget.api,
+                              );
+                            }
+                          }),
+                    icon: const Icon(Icons.lock_open_outlined),
+                    label: const Text('Lấy OTP sửa ô'),
+                  ),
+                ],
+                if (!owner && active) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: state.busy ? null : () => evidence(state, task),
+                    icon: const Icon(Icons.add_a_photo_outlined),
+                    label: const Text('Thêm ảnh minh chứng'),
+                  ),
+                  FilledButton(
+                    onPressed: state.busy
+                        ? null
+                        : () {
+                            if (widget.session.role == AppRole.technician) {
+                              state.run(() async {
+                                final form = await askForm(
+                                  context,
+                                  'Gửi báo cáo sửa chữa',
+                                  [
+                                    const InputSpec(
+                                      'report',
+                                      'Kết quả kiểm tra / sửa',
+                                      lines: 4,
+                                      minLength: 10,
+                                    ),
+                                  ],
+                                );
+                                if (form == null) return;
+                                await widget.api.post(
+                                  '/api/staff/tasks/$id/resolve-incident',
+                                  {
+                                    'id': const Uuid().v4(),
+                                    'version': task['version'],
+                                    'report': form['report'],
+                                  },
+                                );
+                                if (context.mounted) {
+                                  message(
+                                    context,
+                                    'Đã gửi để Manager kiểm tra.',
+                                  );
+                                }
                               });
-                          if (context.mounted) {
-                            message(context, 'Đã gửi để Manager kiểm tra.');
-                          }
-                        });
-                      } else {
-                        transition(state, task, 'SUBMITTED');
-                      }
-                    },
-              child: const Text('Gửi báo cáo để duyệt'),
-            ),
-          ],
-          if (owner && task['status'] == 'SUBMITTED')
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () => transition(state, task, 'COMPLETED'),
-              child: const Text('Duyệt hoàn tất'),
-            ),
-          if (owner && ['ASSIGNED', 'IN_PROGRESS'].contains(task['status']))
-            TextButton(
-              onPressed: state.busy
-                  ? null
-                  : () => transition(state, task, 'CANCELLED'),
-              child: const Text('Hủy công việc theo điều kiện'),
-            ),
-          const Divider(height: 32),
-          const Text(
-            'Lịch sử',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          for (final event in (detail['history'] as List? ?? []).map(objectOf))
-            RecordCard(
-              title: valueOf(event, 'actorName'),
-              subtitle:
-                  '${valueOf(event, 'action')}\n${valueOf(event, 'report', '')}\n${dateText(event['createdAt'])}',
-            ),
-          if (detail['hasMore'] == true)
-            const InfoBox(
-              'Đang hiển thị trang lịch sử mới nhất. Lịch sử đầy đủ có trên cổng Web.',
-            ),
-        ],
-      );
-    },
-  );
+                            } else {
+                              transition(state, task, 'SUBMITTED');
+                            }
+                          },
+                    child: const Text('Gửi báo cáo để duyệt'),
+                  ),
+                ],
+                if (owner && task['status'] == 'SUBMITTED')
+                  FilledButton(
+                    onPressed: state.busy
+                        ? null
+                        : () => transition(state, task, 'COMPLETED'),
+                    child: const Text('Duyệt hoàn tất'),
+                  ),
+                if (owner &&
+                    ['ASSIGNED', 'IN_PROGRESS'].contains(task['status']))
+                  TextButton(
+                    onPressed: state.busy
+                        ? null
+                        : () => transition(state, task, 'CANCELLED'),
+                    child: const Text('Hủy công việc theo điều kiện'),
+                  ),
+                const Divider(height: 32),
+                const Text(
+                  'Lịch sử',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                for (final event in (detail['history'] as List? ?? []).map(
+                  objectOf,
+                ))
+                  RecordCard(
+                    title: valueOf(event, 'actorName'),
+                    subtitle:
+                        '${valueOf(event, 'action')}\n${valueOf(event, 'report', '')}\n${dateText(event['createdAt'])}',
+                  ),
+                if (detail['hasMore'] == true)
+                  const InfoBox(
+                    'Đang hiển thị trang lịch sử mới nhất. Lịch sử đầy đủ có trên cổng Web.',
+                  ),
+              ],
+            );
+          },
+        );
 
   Future<void> staffPreorder(
     ResourceViewState state,
@@ -561,8 +591,8 @@ class InstallationDetail extends StatelessWidget {
             PageTitle(
               valueOf(row, 'shopName'),
               '${valueOf(row, 'kioskCode')} • ${valueOf(row, 'scheduledDate')}',
+              status: StatusChip(row['status']),
             ),
-            StatusChip(row['status']),
             RecordCard(
               title: 'Địa chỉ lắp đặt',
               subtitle: valueOf(row, 'installationAddress'),

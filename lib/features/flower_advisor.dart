@@ -151,6 +151,7 @@ class _FlowerAdvisorPageState extends State<FlowerAdvisorPage> {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: DropdownButtonFormField<String>(
+              style: Theme.of(context).textTheme.bodyLarge,
               initialValue: preferences[group.key],
               decoration: InputDecoration(
                 labelText: productTagLabels[group.key],
