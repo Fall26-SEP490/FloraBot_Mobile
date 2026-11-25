@@ -8,12 +8,14 @@ class PreorderQuoteEditor extends StatefulWidget {
     required this.catalog,
     required this.initialPrice,
     required this.chooseTime,
+    this.onChat,
     super.key,
   });
   final Json order;
   final List<Json> catalog;
   final dynamic initialPrice;
   final Future<DateTime?> Function(DateTime?) chooseTime;
+  final Future<void> Function(BuildContext)? onChat;
   @override
   State<PreorderQuoteEditor> createState() => _PreorderQuoteEditorState();
 }
@@ -24,6 +26,13 @@ class _PreorderQuoteEditorState extends State<PreorderQuoteEditor> {
   late DateTime? pickup;
   final quantities = <String, int>{};
   String? error;
+  String? chatError;
+  bool openingChat = false;
+  bool get accessoriesChanged => requested.any(
+    (item) =>
+        (quantities['${item['accessoryId']}'] ?? 0) !=
+        (item['quantity'] as num? ?? 0),
+  );
   List<Json> get requested =>
       itemsOf(widget.order['requestedAccessories'] ?? []);
   Json? current(Json item) => widget.catalog
@@ -215,6 +224,50 @@ class _PreorderQuoteEditorState extends State<PreorderQuoteEditor> {
                   const Text(
                     'Giảm số lượng phụ kiện theo tồn kho hiện có.',
                     style: TextStyle(fontSize: 12, color: Color(0xFFB42318)),
+                  ),
+              ],
+              if (accessoriesChanged) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Phụ kiện đã thay đổi so với yêu cầu. Hãy trao đổi với khách trước khi gửi báo giá.',
+                  style: TextStyle(color: Color(0xFF925B0A), fontSize: 13),
+                ),
+                if (widget.onChat != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                      label: Text(
+                        openingChat ? 'Đang mở trò chuyện…' : 'Nhắn khách',
+                      ),
+                      onPressed: openingChat
+                          ? null
+                          : () async {
+                              setState(() {
+                                openingChat = true;
+                                chatError = null;
+                              });
+                              try {
+                                await widget.onChat!(context);
+                              } catch (_) {
+                                if (mounted) {
+                                  setState(
+                                    () => chatError =
+                                        'Chưa mở được chat. Vui lòng thử lại.',
+                                  );
+                                }
+                              } finally {
+                                if (mounted) {
+                                  setState(() => openingChat = false);
+                                }
+                              }
+                            },
+                    ),
+                  ),
+                if (chatError != null)
+                  Text(
+                    chatError!,
+                    style: const TextStyle(color: Color(0xFFB42318)),
                   ),
               ],
               const SizedBox(height: 16),

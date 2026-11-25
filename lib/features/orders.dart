@@ -1066,6 +1066,33 @@ class _OrderDetailState extends State<OrderDetail> {
               icon: const Icon(Icons.qr_code_2, size: 18),
               label: const Text('Thanh toán qua payOS'),
             ),
+          if (owner)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: state.busy
+                    ? null
+                    : () => state.run(() async {
+                        final chat = objectOf(
+                          await widget.api.post('$base/$id/chat/open'),
+                        );
+                        if (!context.mounted) return;
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ChatThread(
+                              widget.api,
+                              valueOf(chat, 'id'),
+                              false,
+                              valueOf(chat, 'otherPartyName', 'Khách hàng'),
+                            ),
+                          ),
+                        );
+                      }),
+                icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                label: const Text('Nhắn khách'),
+              ),
+            ),
           if (!owner && '${order['sellerId'] ?? ''}'.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -1195,6 +1222,21 @@ class _OrderDetailState extends State<OrderDetail> {
         catalog: catalog,
         initialPrice: initialPrice,
         chooseTime: (initial) => choosePickup(context, initial: initial),
+        onChat: (editorContext) async {
+          final chat = objectOf(await widget.api.post('$base/$id/chat/open'));
+          if (!editorContext.mounted) return;
+          await Navigator.push(
+            editorContext,
+            MaterialPageRoute<void>(
+              builder: (_) => ChatThread(
+                widget.api,
+                valueOf(chat, 'id'),
+                false,
+                valueOf(chat, 'otherPartyName', 'Khách hàng'),
+              ),
+            ),
+          );
+        },
       ),
     );
     if (body == null || !mounted) return;

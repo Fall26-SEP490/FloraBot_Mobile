@@ -7,6 +7,7 @@ import 'package:florabot_mobile/core/api.dart';
 import 'package:florabot_mobile/core/models.dart';
 import 'package:florabot_mobile/features/orders.dart';
 import 'package:florabot_mobile/features/preorder_support.dart';
+import 'package:florabot_mobile/features/preorder_quote.dart';
 
 http.Response json(dynamic data, [int status = 200]) => http.Response(
   jsonEncode(data),
@@ -76,6 +77,89 @@ Future<void> tapModal(WidgetTester tester, Finder target) async {
 }
 
 void main() {
+  testWidgets('accessory reminder preserves quote draft across chat', (
+    tester,
+  ) async {
+    await render(
+      tester,
+      PreorderQuoteEditor(
+        order: sample(),
+        catalog: [
+          {
+            'id': 'ribbon',
+            'status': 'ACTIVE',
+            'stockQuantity': 10,
+            'price': 1000,
+          },
+        ],
+        initialPrice: 10000,
+        chooseTime: (_) async => null,
+        onChat: (context) => Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                Scaffold(appBar: AppBar(title: const Text('Chat thử'))),
+          ),
+        ),
+      ),
+    );
+    final warning = find.textContaining('Phụ kiện đã thay đổi');
+    expect(warning, findsNothing);
+    await tester.enterText(find.byType(TextFormField).first, '25000');
+    await tester.tap(find.byTooltip('Giảm Nơ'));
+    await tester.pumpAndSettle();
+    expect(warning, findsOneWidget);
+    await tapModal(tester, find.text('Nhắn khách'));
+    expect(find.text('Chat thử'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('25000'), findsOneWidget);
+    expect(warning, findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Tăng Nơ'));
+    await tester.tap(find.byTooltip('Tăng Nơ'));
+    await tester.pumpAndSettle();
+    expect(warning, findsNothing);
+  });
+  testWidgets('seller opens the customer chat from the preorder request ID', (
+    tester,
+  ) async {
+    final writes = <String>[];
+    final api = ApiClient(
+      Uri.parse('https://example.test'),
+      transport: MockClient((r) async {
+        if (r.method == 'POST') {
+          writes.add(r.url.path);
+          if (r.url.path.endsWith('/chat/open')) {
+            return json({
+              'id': 'correct-chat',
+              'otherPartyName': 'Khách của đơn',
+            });
+          }
+          return json({});
+        }
+        if (r.url.path.endsWith('/preorders')) {
+          return json({
+            'items': [sample()],
+            'hasMore': false,
+          });
+        }
+        return json({'items': [], 'hasMore': false});
+      }),
+    );
+    addTearDown(api.dispose);
+    await render(tester, OrderDetail(api, session(true), sample()));
+    final button = find.text('Nhắn khách');
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(writes, contains('/api/sellers/shop/preorders/request/chat/open'));
+    expect(writes, contains('/api/chats/correct-chat/read'));
+    expect(find.text('Khách của đơn'), findsOneWidget);
+    expect(writes, isNot(contains('/api/member/chats/open')));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
   testWidgets(
     'staff assignment filters unsafe slots and reuses ID after retry',
     (tester) async {
