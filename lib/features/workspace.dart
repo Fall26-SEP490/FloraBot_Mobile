@@ -5,6 +5,7 @@ import '../core/models.dart';
 import '../ui/common.dart';
 import '../ui/brand.dart';
 import 'account.dart';
+import 'auth_screens.dart';
 import 'chat.dart';
 import 'inventory.dart';
 import 'orders.dart';
@@ -13,10 +14,139 @@ import 'technician_iot_health.dart';
 import 'seller_overview.dart';
 import 'seller_tools.dart';
 
+class GuestWorkspace extends StatefulWidget {
+  const GuestWorkspace(
+    this.auth, {
+    this.onPendingOrder,
+    this.onPendingChat,
+    this.onClearPending,
+    super.key,
+  });
+  final AuthController auth;
+  final void Function(PendingFlowerOrder)? onPendingOrder;
+  final void Function(Json)? onPendingChat;
+  final VoidCallback? onClearPending;
+
+  @override
+  State<GuestWorkspace> createState() => _GuestWorkspaceState();
+}
+
+class _GuestWorkspaceState extends State<GuestWorkspace> {
+  int selected = 0;
+
+  Future<void> _promptOrder(
+    BuildContext context,
+    Json row,
+    List<Json> rows,
+  ) async {
+    widget.onPendingOrder?.call((item: row, rows: rows));
+    await showGuestAuthPrompt(
+      context,
+      auth: widget.auth,
+      title: 'Đăng nhập để đặt hoa',
+      subtitle: '${valueOf(row, 'name')} · ${valueOf(row, 'shopName')}',
+      onCancelled: widget.onClearPending,
+    );
+  }
+
+  Future<void> _promptChat(BuildContext context, Json row) async {
+    widget.onPendingChat?.call(row);
+    await showGuestAuthPrompt(
+      context,
+      auth: widget.auth,
+      title: 'Đăng nhập để nhắn shop',
+      subtitle: valueOf(row, 'shopName'),
+      onCancelled: widget.onClearPending,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: selected == 0
+        ? AppBar(
+            centerTitle: false,
+            title: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_florist_rounded),
+                SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'FloraBot',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  widget.onClearPending?.call();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => LoginScreen(widget.auth, showBack: true),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Đăng nhập',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+          )
+        : null,
+    body: SafeArea(
+      child: KeyedSubtree(
+        key: ValueKey('guest:$selected'),
+        child: selected == 0
+            ? CatalogPage(
+                widget.auth.api,
+                null,
+                onGuestOrder: _promptOrder,
+                onGuestChat: _promptChat,
+              )
+            : LoginScreen(widget.auth),
+      ),
+    ),
+    bottomNavigationBar: NavigationBar(
+      animationDuration: const Duration(milliseconds: 250),
+      selectedIndex: selected,
+      onDestinationSelected: (index) {
+        if (index == 1) widget.onClearPending?.call();
+        setState(() => selected = index);
+      },
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.grid_view_rounded),
+          label: 'Tổng quan',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline),
+          label: 'Tài khoản',
+        ),
+      ],
+    ),
+  );
+}
+
 class Workspace extends StatefulWidget {
-  const Workspace(this.auth, this.session, {super.key});
+  const Workspace(
+    this.auth,
+    this.session, {
+    this.pendingOrder,
+    this.pendingChat,
+    this.onPendingConsumed,
+    super.key,
+  });
   final AuthController auth;
   final Session session;
+  final PendingFlowerOrder? pendingOrder;
+  final Json? pendingChat;
+  final VoidCallback? onPendingConsumed;
   @override
   State<Workspace> createState() => _WorkspaceState();
 }
@@ -54,7 +184,7 @@ class _WorkspaceState extends State<Workspace> {
       ],
       AppRole.staff => ['Tổng quan', 'Công việc', 'Tài khoản'],
       AppRole.seller => ['Tổng quan', 'Tủ hoa', 'Đơn hàng', 'Tài khoản'],
-      AppRole.customer => ['Tổng quan', 'Khám phá', 'Đơn đặt', 'Tài khoản'],
+      AppRole.customer => ['Tổng quan', 'Đơn đặt', 'Tài khoản'],
     };
     final icons = switch (user.role) {
       AppRole.technician => [
@@ -77,13 +207,13 @@ class _WorkspaceState extends State<Workspace> {
       ],
       AppRole.customer => [
         Icons.grid_view_rounded,
-        Icons.local_florist_outlined,
         Icons.shopping_bag_outlined,
         Icons.person_outline,
       ],
     };
+    final active = selected.clamp(0, labels.length - 1);
     Widget body;
-    if (selected == 0) {
+    if (active == 0) {
       body = user.role == AppRole.seller
           ? SellerOverviewPage(api, user, (index) {
               if (index == 3) {
@@ -92,6 +222,15 @@ class _WorkspaceState extends State<Workspace> {
                 setState(() => selected = index);
               }
             })
+          : user.role == AppRole.customer
+          ? CatalogPage(
+              api,
+              user,
+              onOpenOrders: () => setState(() => selected = 1),
+              pendingOrder: widget.pendingOrder,
+              pendingChat: widget.pendingChat,
+              onPendingConsumed: widget.onPendingConsumed,
+            )
           : OverviewPage(api, user, (index) {
               if (user.role == AppRole.staff && index == 2) {
                 _openChats(context, api, user);
@@ -99,24 +238,23 @@ class _WorkspaceState extends State<Workspace> {
                 setState(() => selected = index);
               }
             });
-    } else if (selected == labels.length - 1) {
+    } else if (active == labels.length - 1) {
       body = AccountPage(widget.auth, user);
     } else {
       body = switch (user.role) {
-        AppRole.technician => switch (selected) {
+        AppRole.technician => switch (active) {
           1 => TasksPage(api, user),
           2 => InstallationsPage(api),
           _ => TechnicianKioskHealthPage(api: api),
         },
         AppRole.staff => TasksPage(api, user),
         AppRole.seller =>
-          selected == 1 ? KiosksPage(api, user) : OrdersPage(api, user),
-        AppRole.customer =>
-          selected == 1 ? CatalogPage(api, user) : OrdersPage(api, user),
+          active == 1 ? KiosksPage(api, user) : OrdersPage(api, user),
+        AppRole.customer => OrdersPage(api, user),
       };
     }
     return Scaffold(
-      drawer: user.role == AppRole.seller && selected == 0
+      drawer: user.role == AppRole.seller && active == 0
           ? _SellerOperationsDrawer(
               api: api,
               user: user,
@@ -126,7 +264,7 @@ class _WorkspaceState extends State<Workspace> {
               },
             )
           : null,
-      appBar: selected == 0
+      appBar: active == 0
           ? AppBar(
               centerTitle: true,
               title: const Row(
@@ -143,10 +281,7 @@ class _WorkspaceState extends State<Workspace> {
             )
           : null,
       body: SafeArea(
-        child: KeyedSubtree(
-          key: ValueKey('${user.role}:$selected'),
-          child: body,
-        ),
+        child: KeyedSubtree(key: ValueKey('${user.role}:$active'), child: body),
       ),
       floatingActionButton: hasChat
           ? FloatingActionButton(
@@ -160,7 +295,7 @@ class _WorkspaceState extends State<Workspace> {
           : null,
       bottomNavigationBar: NavigationBar(
         animationDuration: const Duration(milliseconds: 250),
-        selectedIndex: selected,
+        selectedIndex: active,
         onDestinationSelected: (index) => setState(() => selected = index),
         destinations: [
           for (var i = 0; i < labels.length; i++)

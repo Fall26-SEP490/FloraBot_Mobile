@@ -6,10 +6,16 @@ import 'package:image_picker/image_picker.dart';
 import 'models.dart';
 
 class ApiError implements Exception {
-  const ApiError(this.status, this.message, {this.ambiguous = false});
+  const ApiError(
+    this.status,
+    this.message, {
+    this.ambiguous = false,
+    this.code,
+  });
   final int status;
   final String message;
   final bool ambiguous;
+  final String? code;
   @override
   String toString() => message;
 }
@@ -146,6 +152,13 @@ class ApiClient {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final detail = data is Map ? data['detail'] ?? data['message'] : null;
+      final code = data is Map
+          ? (data['code'] is String
+                ? data['code'] as String
+                : data['error'] is String
+                ? data['error'] as String
+                : null)
+          : null;
       final message = detail is String
           ? detail
           : switch (response.statusCode) {
@@ -157,7 +170,7 @@ class ApiClient {
               429 => 'Thao tác quá nhanh. Vui lòng chờ rồi thử lại.',
               _ => 'Máy chủ chưa xử lý được yêu cầu (${response.statusCode}).',
             };
-      throw ApiError(response.statusCode, message);
+      throw ApiError(response.statusCode, message, code: code);
     }
     if (response.statusCode != 204 && data == null) {
       throw const ApiError(0, 'Máy chủ trả dữ liệu không hợp lệ.');

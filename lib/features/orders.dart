@@ -11,6 +11,9 @@ import '../ui/common.dart';
 import 'inventory.dart';
 import 'chat.dart';
 import 'receipt.dart';
+import '../ui/customer_flower_card.dart';
+import 'customer_catalog_filters.dart';
+import 'customer_preorder_form.dart';
 
 Future<DateTime?> choosePickup(
   BuildContext context, {
@@ -39,171 +42,319 @@ Future<DateTime?> choosePickup(
   return result;
 }
 
+typedef PendingFlowerOrder = ({Json item, List<Json> rows});
+
 class CatalogPage extends StatefulWidget {
-  const CatalogPage(this.api, this.session, {super.key});
+  const CatalogPage(
+    this.api,
+    this.session, {
+    this.onOpenOrders,
+    this.onGuestOrder,
+    this.onGuestChat,
+    this.pendingOrder,
+    this.pendingChat,
+    this.onPendingConsumed,
+    super.key,
+  });
   final ApiClient api;
-  final Session session;
+  final Session? session;
+  final VoidCallback? onOpenOrders;
+  final Future<void> Function(BuildContext, Json, List<Json>)? onGuestOrder;
+  final Future<void> Function(BuildContext, Json)? onGuestChat;
+  final PendingFlowerOrder? pendingOrder;
+  final Json? pendingChat;
+  final VoidCallback? onPendingConsumed;
   @override
   State<CatalogPage> createState() => _CatalogPageState();
 }
 
 class _CatalogPageState extends State<CatalogPage> {
+  final _resourceKey = GlobalKey<ResourceViewState>();
   String search = '';
+  final overviewSearch = TextEditingController();
+  CustomerCatalogFilters filters = const CustomerCatalogFilters();
+  int visibleFlowers = 6;
+  bool _pendingHandled = false;
+
   @override
-  Widget build(BuildContext context) => ApiListPage(
-    api: widget.api,
-    path:
-        '/api/shop/catalog?availablePreorderOnly=true&search=${Uri.encodeQueryComponent(search)}',
-    title: 'Chọn hoa, hẹn ngày nhận',
-    subtitle: 'Hoa theo mẫu từ các shop, nhận tại kiosk được chọn.',
-    actions: [
-      OutlinedButton.icon(
-        onPressed: () async {
-          final selected = await openPage<String>(
+  void initState() {
+    super.initState();
+    _resumePendingIfNeeded();
+  }
+
+  void _resumePendingIfNeeded() {
+    if (_pendingHandled || widget.session == null) return;
+    final pendingOrder = widget.pendingOrder;
+    final pendingChat = widget.pendingChat;
+    if (pendingOrder == null && pendingChat == null) return;
+    _pendingHandled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      widget.onPendingConsumed?.call();
+      if (!mounted) return;
+      if (pendingOrder != null) {
+        await _openPreorder(pendingOrder.item, rows: pendingOrder.rows);
+      } else if (pendingChat != null) {
+        final sellerId = '${pendingChat['sellerId'] ?? ''}';
+        if (sellerId.isNotEmpty) {
+          await openCustomerChat(
             context,
-            'Gợi ý chọn hoa',
-            FlowerAdvisorPage(widget.api),
+            widget.api,
+            sellerId,
+            productId: '${pendingChat['productId'] ?? ''}',
           );
-          if (selected != null && mounted) {
-            setState(
-              () => search = selected.length > 100
-                  ? selected.substring(0, 100)
-                  : selected,
-            );
-          }
-        },
-        icon: const Icon(Icons.auto_awesome),
-        label: const Text('Gợi ý chọn hoa bằng AI'),
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    overviewSearch.dispose();
+    super.dispose();
+  }
+
+  Future<dynamic> loadOverview() async {
+    final flowers = <Json>[];
+    var page = 1;
+    while (mounted) {
+      final result = await widget.api.get('/api/shop/catalog?page=$page');
+      final rows = itemsOf(result);
+      flowers.addAll(rows);
+      if (result is! Map || result['hasMore'] != true || rows.isEmpty) break;
+      page++;
+    }
+    return {'items': flowers, 'hasMore': false};
+  }
+
+  Future<void> openFilters(List<Json> rows) async {
+    final selected = await showCustomerCatalogFilters(context, rows, filters);
+    if (selected != null && mounted) {
+      setState(() {
+        filters = selected.filters;
+        if (selected.clearSearch) {
+          search = '';
+          overviewSearch.clear();
+        }
+        visibleFlowers = 6;
+      });
+    }
+  }
+
+  Future<void> preview(
+    ResourceViewState state,
+    Json row,
+    List<Json> rows,
+  ) async {
+    final sellerId = '${row['sellerId'] ?? ''}';
+    final order = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (detailContext) => CustomerFlowerDetail(
+          item: row,
+          onChat: sellerId.isEmpty
+              ? null
+              : () {
+                  if (widget.session == null) {
+                    widget.onGuestChat?.call(detailContext, row);
+                  } else {
+                    openCustomerChat(
+                      detailContext,
+                      widget.api,
+                      sellerId,
+                      productId: '${row['productId'] ?? ''}',
+                    );
+                  }
+                },
+        ),
       ),
-      SearchBar(
-        hintText: 'Tên hoa, shop...',
-        leading: const Icon(Icons.search),
-        onSubmitted: (value) => setState(() => search = value.trim()),
-        trailing: [
-          IconButton(
-            tooltip: 'Xóa tìm kiếm',
-            onPressed: () => setState(() => search = ''),
-            icon: const Icon(Icons.close),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-    ],
-    item: (context, row, state) => Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: state.busy ? null : () => book(state, row),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    );
+    if (order == true && mounted) await book(state, row, rows: rows);
+  }
+
+  Future<void> openAdvisor() async {
+    final selected = await openPage<String>(
+      context,
+      'Gợi ý chọn hoa',
+      FlowerAdvisorPage(widget.api),
+    );
+    if (selected != null && mounted) {
+      final query = selected.length > 100
+          ? selected.substring(0, 100)
+          : selected;
+      setState(() {
+        search = query.trim();
+        overviewSearch.text = search;
+        visibleFlowers = 6;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ResourceView(
+    key: _resourceKey,
+    resourceKey: 'customer-overview-all',
+    load: loadOverview,
+    builder: (context, data, state) {
+      final rows = itemsOf(data);
+      final matching = filterCustomerFlowers(rows, filters, search);
+      final flowers = matching.take(visibleFlowers).toList();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              if (Uri.tryParse('${row['photo']}')?.scheme == 'https')
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.network(
-                    '${row['photo']}',
-                    height: 180,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox(
-                      height: 100,
-                      child: Icon(
-                        Icons.local_florist_outlined,
-                        size: 50,
-                        color: forest,
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: TextField(
+                    controller: overviewSearch,
+                    style: const TextStyle(fontSize: 14),
+                    textInputAction: TextInputAction.search,
+                    decoration: const InputDecoration(
+                      hintText: 'Tìm hoa hoặc shop',
+                      prefixIcon: Icon(Icons.search_rounded, size: 21),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
+                      isDense: true,
                     ),
+                    onChanged: (value) => setState(() {
+                      search = value.trim();
+                      visibleFlowers = 6;
+                    }),
                   ),
                 ),
-              const SizedBox(height: 12),
-              Text(
-                valueOf(row, 'name'),
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: IconButton(
+                  tooltip: 'Gợi ý chọn hoa bằng AI',
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(10),
+                    backgroundColor: Colors.white,
+                    foregroundColor: forest,
+                    side: const BorderSide(color: Color(0xFFD4E0D4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: state.busy ? null : openAdvisor,
+                  icon: const Icon(Icons.auto_awesome, size: 21),
                 ),
               ),
-              Text('${money(row['price'])} • ${valueOf(row, 'shopName')}'),
-              const SizedBox(height: 8),
-              Text(
-                '${valueOf(row, 'kioskName')}\n${valueOf(row, 'address')}',
-                style: const TextStyle(color: Color(0xFF617568)),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Đặt theo mẫu • Shop sẽ xác nhận báo giá',
-                style: TextStyle(color: forest, fontWeight: FontWeight.bold),
-              ),
-              TextButton.icon(
-                onPressed: state.busy
-                    ? null
-                    : () => state.run(
-                        () => openCustomerChat(
-                          context,
-                          widget.api,
-                          '${row['sellerId']}',
-                          productId: '${row['productId']}',
-                        ),
-                      ),
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Trao đổi với shop'),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: IconButton(
+                  tooltip: 'Bộ lọc',
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(10),
+                    backgroundColor: Colors.white,
+                    foregroundColor: forest,
+                    side: const BorderSide(color: Color(0xFFD4E0D4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: state.busy ? null : () => openFilters(rows),
+                  icon: Icon(
+                    filters.active
+                        ? Icons.filter_alt_rounded
+                        : Icons.filter_list,
+                    size: 24,
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    ),
-  );
-  Future<void> book(ResourceViewState state, Json row) => state.run(() async {
-    final form = await askForm(
-      context,
-      'Yêu cầu đặt ${row['name']}',
-      [
-        const InputSpec(
-          'instructions',
-          'Mong muốn / ghi chú cho shop',
-          minLength: 10,
-          lines: 4,
-        ),
-      ],
-      submitLabel: 'Tiếp tục chọn lịch',
-      description:
-          'Giá hiển thị là tham khảo. Shop báo giá và bạn chấp nhận trước khi thanh toán.',
-    );
-    if (form == null || !mounted) return;
-    final pickup = await choosePickup(context);
-    if (pickup == null) return;
-    final availability = objectOf(
-      await widget.api.get(
-        '/api/kiosks/${row['kioskId']}/preorder-availability?pickupAt=${Uri.encodeQueryComponent(pickup.toUtc().toIso8601String())}',
-      ),
-    );
-    if (availability['available'] != true) {
-      throw ApiError(
-        409,
-        valueOf(availability, 'message', 'Điểm nhận chưa đủ chỗ.'),
+          const SizedBox(height: 16),
+          if (flowers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Text(
+                search.isEmpty && !filters.active
+                    ? 'Chưa có mẫu hoa nào.'
+                    : 'Không tìm thấy mẫu hoa phù hợp.',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 700 ? 3 : 2;
+                final width =
+                    (constraints.maxWidth - (columns - 1) * 12) / columns;
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final row in flowers)
+                      SizedBox(
+                        width: width,
+                        child: CustomerFlowerCard(
+                          item: row,
+                          onOpen: state.busy
+                              ? null
+                              : () => preview(state, row, rows),
+                          onOrder: state.busy || !canCustomerPreorder(row)
+                              ? null
+                              : () => book(state, row, rows: rows),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          if (matching.length > visibleFlowers) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: state.busy
+                  ? null
+                  : () => setState(() => visibleFlowers += 6),
+              child: const Text('Xem thêm mẫu hoa'),
+            ),
+          ],
+        ],
       );
-    }
-    if (!mounted ||
-        !await confirm(
-          context,
-          'Gửi yêu cầu đặt hoa?',
-          '${row['shopName']}\n${row['kioskName']}\nNhận lúc ${dateText(pickup.toIso8601String())}\nChưa thu tiền ở bước này.',
-        )) {
+    },
+  );
+  Future<void> _openPreorder(
+    Json row, {
+    List<Json> rows = const [],
+    ResourceViewState? state,
+  }) async {
+    final result = await openCustomerPreorderForm(
+      context,
+      api: widget.api,
+      item: row,
+      catalogRows: rows,
+    );
+    if (!mounted || result == null) return;
+    if (result == CustomerPreorderResult.viewOrders) {
+      if (widget.onOpenOrders != null) {
+        widget.onOpenOrders!();
+      } else {
+        message(context, 'Đã gửi yêu cầu. Xem báo giá tại mục Đơn đặt.');
+      }
       return;
     }
-    await widget.api.post('/api/member/preorders', {
-      'id': const Uuid().v4(),
-      'kind': 'CUSTOM',
-      'productId': row['productId'],
-      'kioskId': row['kioskId'],
-      'pickupAt': pickup.toUtc().toIso8601String(),
-      'instructions': form['instructions'],
-    });
-    if (mounted) {
-      message(context, 'Đã gửi yêu cầu. Xem báo giá tại mục Đơn đặt.');
+    await (state ?? _resourceKey.currentState)?.reload();
+  }
+
+  Future<void> book(
+    ResourceViewState state,
+    Json row, {
+    List<Json> rows = const [],
+  }) async {
+    if (widget.session == null) {
+      await widget.onGuestOrder?.call(context, row, rows);
+      return;
     }
-  });
+    await _openPreorder(row, rows: rows, state: state);
+  }
 }
 
 class OrdersPage extends StatefulWidget {
@@ -215,40 +366,72 @@ class OrdersPage extends StatefulWidget {
 }
 
 class _OrdersPageState extends State<OrdersPage> {
+  final searchInput = TextEditingController();
   String search = '', filter = 'ALL';
   int page = 1;
   bool get seller => widget.session.role == AppRole.seller;
   String get base => seller
       ? '/api/sellers/${widget.session.sellerId}/preorders'
       : '/api/member/preorders';
-  bool matches(Json row) => switch (filter) {
-    'ATTENTION' =>
-      seller
-          ? (row['orderStatus'] == null && row['state'] == 'REQUESTED') ||
-                (row['orderStatus'] == 'PAID' && row['ready'] != true)
-          : (row['state'] == 'QUOTED' && !preorderQuoteExpired(row)) ||
-                row['orderStatus'] == 'AWAITING_PAYMENT',
-    'PREPARING' => row['orderStatus'] == 'PAID' && row['ready'] != true,
+
+  @override
+  void dispose() {
+    searchInput.dispose();
+    super.dispose();
+  }
+
+  List<(String, String)> get _filters => seller
+      ? const [
+          ('ALL', 'Tất cả'),
+          ('ATTENTION', 'Cần xử lý'),
+          ('QUOTED', 'Chờ khách'),
+          ('READY', 'Tại tủ'),
+          ('COMPLETED', 'Hoàn tất'),
+          ('CANCELLED', 'Hủy / Hết hạn'),
+        ]
+      : const [
+          ('ALL', 'Tất cả'),
+          ('ATTENTION', 'Cần xử lý'),
+          ('TRACKING', 'Đang theo dõi'),
+          ('READY', 'Nhận tại tủ'),
+          ('COMPLETED', 'Hoàn tất'),
+          ('CANCELLED', 'Hủy / Hết hạn'),
+        ];
+
+  bool matchesFilter(Json row, String code) => switch (code) {
+    'ATTENTION' => preorderNeedsAttention(row, seller: seller),
+    'TRACKING' =>
+      !preorderClosed(row) && !preorderNeedsAttention(row, seller: seller),
+    'QUOTED' =>
+      (row['orderStatus'] == null &&
+              row['state'] == 'QUOTED' &&
+              !preorderQuoteExpired(row)) ||
+          row['orderStatus'] == 'AWAITING_PAYMENT',
     'READY' => row['orderStatus'] == 'PAID' && row['ready'] == true,
-    'CANCELLED' => [
-      'CANCELLED',
-      'REJECTED',
-      'EXPIRED',
-    ].contains(preorderState(row)),
+    'COMPLETED' => ['COMPLETED', 'REFUNDED'].contains(preorderState(row)),
+    'CANCELLED' =>
+      ['CANCELLED', 'REJECTED', 'EXPIRED'].contains(preorderState(row)) ||
+          (row['orderStatus'] == null &&
+              row['state'] == 'QUOTED' &&
+              preorderQuoteExpired(row)),
     'ALL' => true,
-    _ => preorderState(row) == filter,
+    _ => preorderState(row) == code,
   };
+
   @override
   Widget build(BuildContext context) => ResourceView(
     load: () => allPreorders(widget.api, base),
     builder: (context, data, state) {
-      final rows = itemsOf(data)
+      final allRows = itemsOf(data);
+      final query = normalizeOrderQuery(search);
+      final rows = allRows
           .where(
             (row) =>
-                matches(row) &&
-                '${row['orderCode']} ${row['id']} ${row['productName']} ${row['kioskName']}'
-                    .toLowerCase()
-                    .contains(search.trim().toLowerCase()),
+                matchesFilter(row, filter) &&
+                (query.isEmpty ||
+                    normalizeOrderQuery(
+                      '${row['orderCode']} ${row['id']} ${row['productName']} ${row['shopName']} ${row['kioskName']} ${row['address']}',
+                    ).contains(query)),
           )
           .toList();
       final pages = ((rows.length + 9) ~/ 10).clamp(1, 1000000);
@@ -256,61 +439,166 @@ class _OrdersPageState extends State<OrdersPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            seller ? 'Đơn đặt trước' : 'Đơn đặt của tôi',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: forest,
-            ),
-          ),
-          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 44,
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Mã đơn, tên hoa, kiosk...',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: (value) => setState(() {
-                      search = value;
-                      page = 1;
-                    }),
+                child: Text(
+                  seller ? 'Đơn đặt trước' : 'Đơn đặt của tôi',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: forest,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              InventoryFilter(
-                value: filter,
-                options: const {
-                  'ALL': 'Tất cả đơn',
-                  'ATTENTION': 'Cần xử lý',
-                  'REQUESTED': 'Chờ báo giá',
-                  'QUOTED': 'Đã báo giá',
-                  'AWAITING_PAYMENT': 'Chờ thanh toán',
-                  'PREPARING': 'Cần nạp hoa',
-                  'READY': 'Sẵn sàng nhận',
-                  'COMPLETED': 'Đã nhận hoa',
-                  'REFUNDED': 'Đã hoàn tiền',
-                  'CANCELLED': 'Đã hủy / hết hạn',
-                },
-                onChanged: (value) => setState(() {
-                  filter = value;
-                  page = 1;
-                }),
-              ),
+              if (allRows.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAF3EC),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${allRows.length} đơn',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: forest,
+                    ),
+                  ),
+                ),
             ],
           ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 44,
+            child: TextField(
+              controller: searchInput,
+              style: const TextStyle(fontSize: 14),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: seller
+                    ? 'Tìm mã đơn, tên hoa, tủ...'
+                    : 'Tìm mã đơn, tên hoa, shop, tủ...',
+                prefixIcon: const Icon(Icons.search_rounded, size: 21),
+                suffixIcon: search.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Xóa tìm kiếm',
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => setState(() {
+                          searchInput.clear();
+                          search = '';
+                          page = 1;
+                        }),
+                      ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                isDense: true,
+              ),
+              onChanged: (value) => setState(() {
+                search = value;
+                page = 1;
+              }),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < _filters.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Builder(
+                    builder: (_) {
+                      final (code, label) = _filters[i];
+                      final selected = filter == code;
+                      final count = code == 'ALL'
+                          ? allRows.length
+                          : allRows
+                                .where((row) => matchesFilter(row, code))
+                                .length;
+                      final text = code == 'ALL' || count == 0
+                          ? label
+                          : '$label ($count)';
+                      return ChoiceChip(
+                        label: Text(text),
+                        selected: selected,
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        selectedColor: const Color(0xFFE4EFE8),
+                        backgroundColor: Colors.white,
+                        side: BorderSide(
+                          color: selected
+                              ? forest
+                              : code == 'ATTENTION' && count > 0
+                              ? const Color(0xFFF3C677)
+                              : const Color(0xFFD6E1D8),
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight:
+                              selected || (code == 'ATTENTION' && count > 0)
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: selected
+                              ? forest
+                              : code == 'ATTENTION' && count > 0
+                              ? const Color(0xFF925B0A)
+                              : const Color(0xFF476451),
+                        ),
+                        onSelected: (_) => setState(() {
+                          filter = code;
+                          page = 1;
+                        }),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
           if (rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Text(
-                'Không có đơn phù hợp.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Color(0xFF617267)),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 40,
+                    color: Color(0xFF9BB0A3),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    allRows.isEmpty
+                        ? 'Chưa có đơn đặt nào.'
+                        : 'Không có đơn phù hợp.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: Color(0xFF617267),
+                    ),
+                  ),
+                  if (filter != 'ALL' || search.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        filter = 'ALL';
+                        search = '';
+                        searchInput.clear();
+                        page = 1;
+                      }),
+                      child: const Text('Xem tất cả đơn'),
+                    ),
+                  ],
+                ],
               ),
             ),
           for (final row in rows.skip((current - 1) * 10).take(10))
@@ -484,8 +772,8 @@ class _OrderDetailState extends State<OrderDetail> {
                   ),
                   const SizedBox(width: 10),
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 132),
-                    child: PreorderStatus(order),
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: PreorderStatus(order, seller: owner),
                   ),
                 ],
               ),
@@ -499,9 +787,11 @@ class _OrderDetailState extends State<OrderDetail> {
                   color: forest,
                 ),
               ),
+              PreorderStepper(order),
               const SizedBox(height: 12),
               InventoryField('Lịch nhận', dateText(order['pickupAt'])),
-              InventoryField('Nhận trước', dateText(order['pickupBefore'])),
+              if (order['pickupBefore'] != null)
+                InventoryField('Nhận trước', dateText(order['pickupBefore'])),
               if (order['payBefore'] != null && status == 'AWAITING_PAYMENT')
                 InventoryField('Hạn trả tiền', dateText(order['payBefore'])),
               if (order['quoteExpiresAt'] != null && order['state'] == 'QUOTED')
@@ -658,6 +948,19 @@ class _OrderDetailState extends State<OrderDetail> {
               child: const Text('Giao nhân viên nạp hoa'),
             ),
           ],
+          if (!owner && status == 'PAID' && order['ready'] != true)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Shop đang chuẩn bị hoa.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF075985),
+                ),
+              ),
+            ),
           if (status == 'PAID' && order['ready'] == true)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
@@ -667,7 +970,9 @@ class _OrderDetailState extends State<OrderDetail> {
                         )?.isBefore(DateTime.now()) ??
                         false)
                     ? 'Đã quá lịch nhận hoa. Cần kiểm tra với khách.'
-                    : 'Hoa đã sẵn sàng tại tủ.',
+                    : owner
+                    ? 'Hoa đã sẵn sàng tại tủ.'
+                    : 'Hoa đã sẵn sàng tại tủ. Dùng mã OTP trong email để nhận.',
                 style: const TextStyle(
                   fontSize: 13,
                   height: 1.5,
@@ -761,21 +1066,42 @@ class _OrderDetailState extends State<OrderDetail> {
               icon: const Icon(Icons.qr_code_2, size: 18),
               label: const Text('Thanh toán qua payOS'),
             ),
+          if (!owner && '${order['sellerId'] ?? ''}'.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: state.busy
+                    ? null
+                    : () => openCustomerChat(
+                        context,
+                        widget.api,
+                        '${order['sellerId']}',
+                        productId: '${order['productId'] ?? ''}'.isEmpty
+                            ? null
+                            : '${order['productId']}',
+                      ),
+                icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                label: const Text('Nhắn shop'),
+              ),
+            ),
           if (!owner &&
               order['orderId'] != null &&
               order['trackingToken'] != null)
-            OutlinedButton.icon(
-              onPressed: () => openPage(
-                context,
-                'Biên nhận và hỗ trợ',
-                ReceiptPage(
-                  widget.api,
-                  '${order['orderId']}',
-                  '${order['trackingToken']}',
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: () => openPage(
+                  context,
+                  'Biên nhận và hỗ trợ',
+                  ReceiptPage(
+                    widget.api,
+                    '${order['orderId']}',
+                    '${order['trackingToken']}',
+                  ),
                 ),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: const Text('Biên nhận và hỗ trợ'),
               ),
-              icon: const Icon(Icons.receipt_long_outlined, size: 18),
-              label: const Text('Biên nhận và hỗ trợ'),
             ),
           if (preorderCanCancel(order, owner) && !awaitingQuote)
             Padding(

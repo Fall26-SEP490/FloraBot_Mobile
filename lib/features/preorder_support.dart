@@ -31,11 +31,15 @@ bool preorderCanSendOtp(Json row, [DateTime? now]) =>
           '${row['pickupBefore']}',
         )?.isAfter(now ?? DateTime.now()) ??
         false);
-(String, Color) preorderAppearance(Json row) {
+(String, Color) preorderAppearance(Json row, {bool seller = true}) {
   final code = preorderState(row);
   if (code == 'PAID') {
     return (
-      row['ready'] == true ? 'Sẵn sàng nhận' : 'Cần nạp hoa',
+      row['ready'] == true
+          ? 'Sẵn sàng nhận'
+          : seller
+          ? 'Cần nạp hoa'
+          : 'Đang chuẩn bị',
       const Color(0xFF075985),
     );
   }
@@ -43,7 +47,9 @@ bool preorderCanSendOtp(Json row, [DateTime? now]) =>
   if (code == 'QUOTED') {
     return (
       preorderQuoteExpired(row) ? 'Báo giá hết hạn' : 'Đã báo giá',
-      const Color(0xFF925B0A),
+      preorderQuoteExpired(row)
+          ? const Color(0xFFB42318)
+          : const Color(0xFF925B0A),
     );
   }
   const labels = {
@@ -63,6 +69,46 @@ bool preorderCanSendOtp(Json row, [DateTime? now]) =>
       ? const Color(0xFFB42318)
       : const Color(0xFF925B0A);
   return (labels[code] ?? statusText(code), color);
+}
+
+bool preorderNeedsAttention(Json row, {required bool seller}) {
+  if (preorderClosed(row)) return false;
+  if (seller) {
+    return (row['orderStatus'] == null && row['state'] == 'REQUESTED') ||
+        (row['orderStatus'] == 'PAID' && row['ready'] != true);
+  }
+  return (row['orderStatus'] == null &&
+          row['state'] == 'QUOTED' &&
+          !preorderQuoteExpired(row)) ||
+      row['orderStatus'] == 'AWAITING_PAYMENT';
+}
+
+int preorderProgressStep(Json row) {
+  final code = preorderState(row);
+  if (code == 'COMPLETED') return 3;
+  if (code == 'DISPENSING' || (code == 'PAID' && row['ready'] == true)) {
+    return 3;
+  }
+  if (code == 'PAID') return 2;
+  if (code == 'AWAITING_PAYMENT' || row['state'] == 'QUOTED') return 1;
+  return 0;
+}
+
+String normalizeOrderQuery(String text) {
+  var value = text.toLowerCase().trim();
+  const folds = {
+    '[àáạảãâầấậẩẫăằắặẳẵ]': 'a',
+    '[èéẹẻẽêềếệểễ]': 'e',
+    '[ìíịỉĩ]': 'i',
+    '[òóọỏõôồốộổỗơờớợởỡ]': 'o',
+    '[ùúụủũưừứựửữ]': 'u',
+    '[ỳýỵỷỹ]': 'y',
+    'đ': 'd',
+  };
+  for (final entry in folds.entries) {
+    value = value.replaceAll(RegExp(entry.key), entry.value);
+  }
+  return value.replaceAll(RegExp(r'\s+'), ' ');
 }
 
 String preorderCode(Json row) => valueOf(
@@ -130,11 +176,12 @@ Future<Json> findPreorder(
 }
 
 class PreorderStatus extends StatelessWidget {
-  const PreorderStatus(this.order, {super.key});
+  const PreorderStatus(this.order, {this.seller = true, super.key});
   final Json order;
+  final bool seller;
   @override
   Widget build(BuildContext context) {
-    final (label, color) = preorderAppearance(order);
+    final (label, color) = preorderAppearance(order, seller: seller);
     return Text(
       label,
       textAlign: TextAlign.right,
@@ -143,6 +190,107 @@ class PreorderStatus extends StatelessWidget {
         height: 1.5,
         fontWeight: FontWeight.w700,
         color: color,
+      ),
+    );
+  }
+}
+
+class PreorderStepper extends StatelessWidget {
+  const PreorderStepper(this.order, {super.key});
+  final Json order;
+  static const _steps = ['Yêu cầu', 'Báo giá', 'Chuẩn bị', 'Nhận hoa'];
+
+  @override
+  Widget build(BuildContext context) {
+    if (preorderClosed(order)) return const SizedBox.shrink();
+    final active = preorderProgressStep(order);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < _steps.length; i++)
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: i == 0
+                              ? Colors.transparent
+                              : i <= active
+                              ? forest
+                              : const Color(0xFFDCE6DF),
+                        ),
+                      ),
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: i <= active ? forest : Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: i <= active
+                                ? forest
+                                : const Color(0xFFC5D4C9),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: i < active
+                            ? const Icon(
+                                Icons.check,
+                                size: 11,
+                                color: Colors.white,
+                              )
+                            : i == active
+                            ? Center(
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: i == _steps.length - 1
+                              ? Colors.transparent
+                              : i < active
+                              ? forest
+                              : const Color(0xFFDCE6DF),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Text(
+                      _steps[i],
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: i == active
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: i <= active ? forest : const Color(0xFF83948A),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -159,77 +307,87 @@ class PreorderCard extends StatelessWidget {
   final VoidCallback onTap;
   final bool seller;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 10),
-    child: Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFDDE6DF)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
+  Widget build(BuildContext context) {
+    final accessories = itemsOf(
+      order['quotedAccessories'] ?? order['requestedAccessories'] ?? [],
+    );
+    final accessoryCount = accessories.fold<int>(
+      0,
+      (sum, item) => sum + ((item['quantity'] as num?)?.toInt() ?? 1),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFFDDE6DF)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        preorderCode(order),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          fontWeight: FontWeight.w700,
+                          color: forest,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 140),
+                      child: PreorderStatus(order, seller: seller),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  valueOf(order, 'productName', 'Đơn theo mẫu'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                    color: forest,
+                  ),
+                ),
+                if (!seller && '${order['shopName'] ?? ''}'.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      preorderCode(order),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      valueOf(order, 'shopName'),
                       style: const TextStyle(
                         fontSize: 12,
-                        height: 1.5,
-                        fontWeight: FontWeight.w700,
-                        color: forest,
+                        color: Color(0xFF617267),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 132),
-                    child: PreorderStatus(order),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                valueOf(order, 'productName', 'Đơn theo mẫu'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: forest,
-                ),
-              ),
-              if (!seller)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    valueOf(order, 'shopName'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF617267),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              _Meta(Icons.location_on_outlined, valueOf(order, 'kioskName')),
-              const SizedBox(height: 5),
-              _Meta(Icons.schedule, dateText(order['pickupAt'])),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
+                const SizedBox(height: 8),
+                _Meta(Icons.location_on_outlined, valueOf(order, 'kioskName')),
+                const SizedBox(height: 5),
+                _Meta(Icons.schedule, dateText(order['pickupAt'])),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
                       order['quotedPrice'] == null
                           ? 'Chưa báo giá'
                           : money(order['quotedPrice']),
@@ -241,15 +399,23 @@ class PreorderCard extends StatelessWidget {
                             : forest,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    if (accessoryCount > 0)
+                      Text(
+                        '· +$accessoryCount phụ kiện',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF617267),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Meta extends StatelessWidget {

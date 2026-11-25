@@ -640,4 +640,121 @@ void main() {
     expect(body, {'reason': 'Không thể chuẩn bị hoa'});
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'customer orders page uses customer wording, status chips, accent-free search, and detail chat at 360',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final quoted = {
+        ...sample(),
+        'id': 'req-quoted',
+        'orderCode': 'FB-QUOTED',
+        'productName': 'Bó hồng pastel',
+        'state': 'QUOTED',
+        'orderId': null,
+        'orderStatus': null,
+        'ready': false,
+      };
+      final preparing = {
+        ...sample(),
+        'id': 'req-paid',
+        'orderCode': 'FB-PREP',
+        'productName': 'Hướng dương rực rỡ',
+        'orderStatus': 'PAID',
+        'ready': false,
+      };
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient(
+          (r) async => json({
+            'items': [quoted, preparing],
+            'hasMore': false,
+          }),
+        ),
+      );
+      addTearDown(api.dispose);
+      await render(tester, OrdersPage(api, session(false)));
+
+      // Customer sees "Đang chuẩn bị" (not seller jargon "Cần nạp hoa")
+      expect(find.text('Đang chuẩn bị'), findsOneWidget);
+      expect(find.text('Cần nạp hoa'), findsNothing);
+      expect(find.text('2 đơn'), findsOneWidget);
+      expect(find.text('Đã báo giá'), findsOneWidget);
+      // Status text aligns to the right side of the card (matching seller cards)
+      expect(tester.getTopRight(find.text('Đã báo giá')).dx, greaterThan(300));
+
+      // Filter chip "Cần xử lý (1)" isolates quoted order
+      await tester.tap(find.text('Cần xử lý (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bó hồng pastel'), findsOneWidget);
+      expect(find.text('Hướng dương rực rỡ'), findsNothing);
+
+      // Reset to Tất cả and verify accent-free search
+      await tester.tap(find.text('Tất cả'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'huong duong');
+      await tester.pumpAndSettle();
+      expect(find.text('Hướng dương rực rỡ'), findsOneWidget);
+      expect(find.text('Bó hồng pastel'), findsNothing);
+
+      // Open detail and verify stepper + Nhắn shop + customer preparing text
+      await tester.tap(find.text('Hướng dương rực rỡ'));
+      await tester.pumpAndSettle();
+      expect(find.text('Shop đang chuẩn bị hoa.'), findsOneWidget);
+      expect(find.text('Nhắn shop'), findsOneWidget);
+      expect(find.text('Chuẩn bị'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'receipt page shows single app bar and clean summary without zero refunds',
+    (tester) async {
+      final row = {...sample(), 'trackingToken': 'tok-1'};
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient((r) async {
+          if (r.url.path == '/api/receipts/lookup') {
+            return json({
+              'orderCode': 'FB261121-2CE559',
+              'status': 'COMPLETED',
+              'createdAt': '2026-11-21T04:11:00Z',
+              'total': 10000,
+              'items': [
+                {
+                  'name': 'Hoa dat rieng: Bó hoa tươi - Only rose 18',
+                  'quantity': 1,
+                  'unitPrice': 10000,
+                  'total': 10000,
+                },
+              ],
+              'refunds': {'pendingAmount': 0, 'paidAmount': 0},
+            });
+          }
+          return json({
+            'items': [row],
+            'hasMore': false,
+          });
+        }),
+      );
+      addTearDown(api.dispose);
+      await render(tester, OrderDetail(api, session(false), row));
+      await tapModal(tester, find.text('Biên nhận và hỗ trợ'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(find.text('Biên nhận và hỗ trợ'), findsOneWidget);
+      expect(
+        find.text('Hoa đặt riêng: Bó hoa tươi - Only rose 18'),
+        findsOneWidget,
+      );
+      expect(find.text('Chờ hoàn tiền'), findsNothing);
+      expect(find.text('Đã hoàn tiền'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

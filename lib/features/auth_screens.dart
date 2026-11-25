@@ -15,16 +15,118 @@ bool validPassword(String text) =>
 bool validEmail(String text) =>
     RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text) && text.length <= 254;
 
+Future<void> showGuestAuthPrompt(
+  BuildContext context, {
+  required AuthController auth,
+  required String title,
+  String? subtitle,
+  VoidCallback? onCancelled,
+}) async {
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    backgroundColor: Colors.white,
+    builder: (sheetContext) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        MediaQuery.paddingOf(sheetContext).bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: forest,
+            ),
+          ),
+          if (subtitle != null && subtitle.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13.5, color: Color(0xFF476451)),
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: () => Navigator.pop(sheetContext, 'login'),
+            child: const Text('Đăng nhập'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+            onPressed: () => Navigator.pop(sheetContext, 'register'),
+            child: const Text('Tạo tài khoản'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (!context.mounted) return;
+  if (choice == 'login') {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => LoginScreen(auth, showBack: true, notice: title),
+      ),
+    );
+    if (auth.session == null) onCancelled?.call();
+    return;
+  }
+  if (choice == 'register') {
+    final verifiedEmail = await Navigator.push<String>(
+      context,
+      MaterialPageRoute<String>(builder: (_) => RegistrationScreen(auth.api)),
+    );
+    if (!context.mounted) return;
+    if (verifiedEmail != null && verifiedEmail.isNotEmpty) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => LoginScreen(
+            auth,
+            showBack: true,
+            initialEmail: verifiedEmail,
+            notice: title,
+          ),
+        ),
+      );
+    }
+    if (auth.session == null) onCancelled?.call();
+    return;
+  }
+  onCancelled?.call();
+}
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen(this.auth, {super.key});
+  const LoginScreen(
+    this.auth, {
+    this.showBack = false,
+    this.notice,
+    this.initialEmail,
+    super.key,
+  });
   final AuthController auth;
+  final bool showBack;
+  final String? notice;
+  final String? initialEmail;
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
   final formKey = GlobalKey<FormState>();
-  final email = TextEditingController(), password = TextEditingController();
+  late final email = TextEditingController(text: widget.initialEmail ?? '');
+  final password = TextEditingController();
   bool busy = false, obscure = true;
   String? error;
   @override
@@ -61,24 +163,37 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    appBar: widget.showBack ? AppBar(title: const Text('Đăng nhập')) : null,
     body: SizedBox.expand(
       child: SafeArea(
+        top: !widget.showBack,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                widget.showBack ? 12 : 24,
+                20,
+                24,
+              ),
               child: AutofillGroup(
                 child: Form(
                   key: formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const BrandWordmark(),
-                      const SizedBox(height: 16),
-                      const LoginArtwork(),
-                      const SizedBox(height: 24),
+                      if (!widget.showBack) ...[
+                        const BrandWordmark(),
+                        const SizedBox(height: 16),
+                        const LoginArtwork(),
+                        const SizedBox(height: 24),
+                      ],
+                      if (widget.notice != null) ...[
+                        InfoBox(widget.notice!),
+                        const SizedBox(height: 12),
+                      ],
                       const Text(
                         'Đăng nhập',
                         style: TextStyle(
@@ -184,13 +299,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         onPressed: busy
                             ? null
-                            : () => Navigator.push(
-                                context,
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      RegistrationScreen(widget.auth.api),
-                                ),
-                              ),
+                            : () async {
+                                final verified = await Navigator.push<String>(
+                                  context,
+                                  MaterialPageRoute<String>(
+                                    builder: (_) =>
+                                        RegistrationScreen(widget.auth.api),
+                                  ),
+                                );
+                                if (verified != null &&
+                                    verified.isNotEmpty &&
+                                    mounted) {
+                                  email.text = verified;
+                                }
+                              },
                         child: const Text('Tạo tài khoản'),
                       ),
                     ],
@@ -458,7 +580,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         );
         if (mounted) {
           message(context, 'Tài khoản đã xác thực. Vui lòng đăng nhập.');
-          Navigator.pop(context);
+          Navigator.pop(context, email.text.trim());
         }
       }
     } catch (e) {

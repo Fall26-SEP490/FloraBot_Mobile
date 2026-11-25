@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/auth.dart';
-import 'features/auth_screens.dart';
+import 'core/models.dart';
+import 'features/orders.dart';
 import 'features/workspace.dart';
 import 'ui/common.dart';
 import 'ui/brand.dart';
@@ -16,6 +17,14 @@ class FloraBotApp extends StatefulWidget {
 
 class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
   bool hidden = false;
+  PendingFlowerOrder? _pendingOrder;
+  Json? _pendingChat;
+
+  void _clearPending() {
+    _pendingOrder = null;
+    _pendingChat = null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +52,9 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
     listenable: widget.auth,
     builder: (context, _) {
       final session = widget.auth.session;
+      if (session != null && session.role != AppRole.customer) {
+        _clearPending();
+      }
       return MaterialApp(
         key: ValueKey('${session?.id}:${session?.role.code}'),
         title: 'FloraBot',
@@ -174,11 +186,29 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
                 ),
               )
             : session == null
-            ? LoginScreen(widget.auth)
+            ? GuestWorkspace(
+                widget.auth,
+                onPendingOrder: (order) {
+                  _pendingOrder = order;
+                  _pendingChat = null;
+                },
+                onPendingChat: (row) {
+                  _pendingChat = row;
+                  _pendingOrder = null;
+                },
+                onClearPending: _clearPending,
+              )
             : Workspace(
                 widget.auth,
                 session,
                 key: ValueKey('${session.id}:${session.role}'),
+                pendingOrder: session.role == AppRole.customer
+                    ? _pendingOrder
+                    : null,
+                pendingChat: session.role == AppRole.customer
+                    ? _pendingChat
+                    : null,
+                onPendingConsumed: _clearPending,
               ),
       );
     },

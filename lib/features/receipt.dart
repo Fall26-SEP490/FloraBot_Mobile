@@ -2,8 +2,15 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
+import '../ui/inventory_widgets.dart';
 import 'inventory.dart' show openPage;
+import 'preorder_support.dart';
 import '../ui/vietnam_bank_picker.dart';
+
+String _formatReceiptItemName(String raw) => raw.replaceFirst(
+  RegExp(r'^Hoa dat rieng:\s*', caseSensitive: false),
+  'Hoa đặt riêng: ',
+);
 
 // Receipt possession credentials stay in memory and in HTTPS bodies/headers.
 class ReceiptPage extends StatelessWidget {
@@ -12,30 +19,165 @@ class ReceiptPage extends StatelessWidget {
   final String orderId, trackingToken;
   @override
   Widget build(BuildContext context) => ResourceView(
-    title: 'Biên nhận và hỗ trợ',
     load: () => api.post('/api/receipts/lookup', {
       'orderId': orderId,
       'trackingToken': trackingToken,
     }),
     builder: (context, data, state) {
       final receipt = objectOf(data), refunds = objectOf(receipt['refunds']);
+      final items = (receipt['items'] as List? ?? const [])
+          .map(objectOf)
+          .toList();
+      final pendingRefund = (refunds['pendingAmount'] as num? ?? 0);
+      final paidRefund = (refunds['paidAmount'] as num? ?? 0);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PageTitle(
-            valueOf(receipt, 'orderCode'),
-            dateText(receipt['createdAt']),
-            status: StatusChip(receipt['status']),
-          ),
-          for (final row in (receipt['items'] as List).map(objectOf))
-            RecordCard(
-              title: valueOf(row, 'name'),
-              subtitle:
-                  '${row['quantity']} × ${money(row['unitPrice'])} • ${money(row['total'])}',
-            ),
-          InfoBox(
-            'Tổng thanh toán: ${money(receipt['total'])}\n'
-            'Chờ hoàn: ${money(refunds['pendingAmount'])}\nĐã hoàn: ${money(refunds['paidAmount'])}',
+          PreorderSection(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      valueOf(receipt, 'orderCode'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.4,
+                        fontWeight: FontWeight.w800,
+                        color: forest,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: InventoryStatus('${receipt['status'] ?? ''}'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                dateText(receipt['createdAt']),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFF617267),
+                ),
+              ),
+              const Divider(height: 20, color: Color(0xFFEAF0E7)),
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _formatReceiptItemName(valueOf(items[i], 'name')),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.4,
+                              fontWeight: FontWeight.w700,
+                              color: forest,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${items[i]['quantity']} × ${money(items[i]['unitPrice'])}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF617267),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      money(items[i]['total']),
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: forest,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const Divider(height: 20, color: Color(0xFFEAF0E7)),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Tổng thanh toán',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: forest,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    money(receipt['total']),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: forest,
+                    ),
+                  ),
+                ],
+              ),
+              if (pendingRefund > 0) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Chờ hoàn tiền',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF925B0A),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      money(pendingRefund),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF925B0A),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (paidRefund > 0) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Đã hoàn tiền',
+                        style: TextStyle(fontSize: 13, color: forest),
+                      ),
+                    ),
+                    Text(
+                      money(paidRefund),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: forest,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
           if (receipt['hasComplaint'] == true)
             OutlinedButton(

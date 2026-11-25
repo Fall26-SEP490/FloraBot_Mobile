@@ -40,7 +40,8 @@ void main() {
       expect(labels.contains('Lắp đặt'), role == AppRole.technician);
       expect(labels.contains('Sức khỏe'), role == AppRole.technician);
       expect(labels.contains('Tủ hoa'), role == AppRole.seller);
-      expect(labels.contains('Khám phá'), role == AppRole.customer);
+      expect(labels.contains('Đơn đặt'), role == AppRole.customer);
+      expect(labels.contains('Khám phá'), isFalse);
       expect(labels.contains('Tin nhắn'), isFalse);
       expect(
         find.byType(DrawerButton),
@@ -201,6 +202,8 @@ void main() {
     final auth = AuthController(api, MemoryTokenVault())..loading = false;
     await tester.pumpWidget(FloraBotApp(auth: auth));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Tài khoản'));
+    await tester.pumpAndSettle();
     final button = find.widgetWithText(FilledButton, 'Đăng nhập');
     await tester.ensureVisible(button);
     await tester.tap(button);
@@ -211,6 +214,109 @@ void main() {
     auth.dispose();
     api.dispose();
   });
+
+  testWidgets(
+    'guest browses flowers first and resumes ordering after signing in',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient((r) async {
+          if (r.url.path == '/api/shop/catalog') {
+            return http.Response(
+              jsonEncode({
+                'items': [
+                  {
+                    'productId': 'rose',
+                    'sellerId': 'shop',
+                    'kioskId': 'kiosk',
+                    'name': 'Bó hồng pastel',
+                    'price': 250000,
+                    'shopName': 'Shop Hoa',
+                    'kioskName': 'Kiosk Hòa Lạc',
+                    'address': 'Hà Nội',
+                    'preorderAvailable': true,
+                  },
+                ],
+                'hasMore': false,
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          if (r.url.path == '/api/mobile/auth/login') {
+            return http.Response(
+              jsonEncode({
+                'accessToken': 'token-123',
+                'refreshToken': 'r' * 64,
+                'user': {
+                  'id': 'cust-1',
+                  'name': 'Khách Hàng',
+                  'role': 'CUSTOMER',
+                },
+              }),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          if (r.url.path.endsWith('/preorder-availability')) {
+            return http.Response(
+              jsonEncode({'available': true}),
+              200,
+              headers: {'content-type': 'application/json; charset=utf-8'},
+            );
+          }
+          return http.Response(
+            jsonEncode([]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      final auth = AuthController(api, MemoryTokenVault())..loading = false;
+      await tester.pumpWidget(FloraBotApp(auth: auth));
+      await tester.pumpAndSettle();
+
+      // Guest sees catalog immediately without login wall
+      expect(find.text('Bó hồng pastel'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Đăng nhập'), findsOneWidget);
+
+      // Selecting "Đặt trước" prompts login / register
+      await tester.tap(find.widgetWithText(FilledButton, 'Đặt trước'));
+      await tester.pumpAndSettle();
+      expect(find.text('Đăng nhập để đặt hoa'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Tạo tài khoản'),
+        findsOneWidget,
+      );
+
+      // Proceed to login and sign in
+      await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'khach@florabot.site',
+      );
+      await tester.enterText(
+        find.byType(TextFormField).last,
+        'MatKhauAnToan123!',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Đăng nhập'));
+      await tester.pumpAndSettle();
+
+      // Automatically opens the preorder form for the chosen flower
+      expect(auth.session?.role, AppRole.customer);
+      expect(find.text('Yêu cầu báo giá'), findsOneWidget);
+      expect(find.text('Bó hồng pastel · Shop Hoa'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      auth.dispose();
+      api.dispose();
+    },
+  );
   testWidgets('OTP is erased when application goes to background', (
     tester,
   ) async {
