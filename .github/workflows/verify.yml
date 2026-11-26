@@ -38,8 +38,8 @@ jobs:
           flutter-version: '3.44.9'
           cache: true
 
-      - name: Install locked dependencies
-        run: flutter pub get --enforce-lockfile
+      - name: Resolve dependencies for Flutter stable
+        run: flutter pub get
 
       - name: Analyze Flutter code
         run: flutter analyze --no-pub
