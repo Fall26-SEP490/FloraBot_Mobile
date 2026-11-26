@@ -25,11 +25,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Java 17
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -38,6 +38,9 @@ jobs:
           channel: master
           flutter-version: '095d8cf5b06e16e161ec195b9add1c1685331a25'
           cache: true
+
+      - name: Select Java for Android builds
+        run: flutter config --jdk-dir="$JAVA_HOME"
 
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
