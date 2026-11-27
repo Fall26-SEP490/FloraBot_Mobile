@@ -67,6 +67,33 @@ Future<void> _selectPickupTime(WidgetTester tester, String slot) async {
 }
 
 void main() {
+  test('pickup requires one hour and stays within thirty days', () {
+    final now = DateTime.parse('2026-11-27T14:25:00+07:00');
+    expect(
+      isValidPreorderPickup(now.add(const Duration(minutes: 59)), now: now),
+      isFalse,
+    );
+    expect(
+      isValidPreorderPickup(now.add(const Duration(hours: 1)), now: now),
+      isTrue,
+    );
+    expect(
+      isValidPreorderPickup(now.add(const Duration(days: 30)), now: now),
+      isTrue,
+    );
+    expect(
+      isValidPreorderPickup(
+        now.add(const Duration(days: 30, seconds: 1)),
+        now: now,
+      ),
+      isFalse,
+    );
+    final selected = now.add(const Duration(hours: 1));
+    expect(
+      isValidPreorderPickup(selected, now: now.add(const Duration(seconds: 1))),
+      isFalse,
+    );
+  });
   testWidgets(
     'supports multi-kiosk switch, accessories total, quick tags, validation, and submit to orders tab',
     (tester) async {
@@ -177,7 +204,12 @@ void main() {
       // Inline validation when pickup date/time missing
       await tester.tap(find.text('Gửi yêu cầu'));
       await tester.pumpAndSettle();
-      expect(find.text('Chọn ngày giờ nhận (tối đa 30 ngày).'), findsOneWidget);
+      expect(
+        find.text(
+          'Giờ nhận phải sau ít nhất 1 giờ và trong 30 ngày kể từ lúc đặt.',
+        ),
+        findsOneWidget,
+      );
 
       // Pick date + time and verify live availability check fired for Kiosk B
       await _selectTomorrowDate(tester);
