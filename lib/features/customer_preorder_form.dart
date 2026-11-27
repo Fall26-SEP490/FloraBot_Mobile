@@ -30,7 +30,7 @@ bool _isPreorderSoldOut(Json row) => isCustomerFlowerSoldOut(row);
 bool isValidPreorderPickup(DateTime pickup, {DateTime? now}) {
   final current = now ?? DateTime.now();
   final delay = pickup.difference(current);
-  return delay > Duration.zero && delay <= const Duration(days: 30);
+  return delay >= const Duration(hours: 1) && delay <= const Duration(days: 30);
 }
 
 Future<CustomerPreorderResult?> openCustomerPreorderForm(
@@ -124,8 +124,11 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
   String get _selectedKioskId => '${_selectedKiosk?['kioskId'] ?? ''}';
 
   DateTime? get _pickupDateTime {
+    return _pickupForTime(_pickupTime);
+  }
+
+  DateTime? _pickupForTime(String? time) {
     final day = _pickupDay;
-    final time = _pickupTime;
     if (day == null || time == null || !time.contains(':')) return null;
     final parts = time.split(':');
     final hour = int.tryParse(parts[0]);
@@ -419,6 +422,10 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
     if (picked != null && mounted) {
       setState(() {
         _pickupDay = picked;
+        final pickup = _pickupDateTime;
+        if (pickup != null && !isValidPreorderPickup(pickup)) {
+          _pickupTime = null;
+        }
         _pickupError = '';
         _error = '';
       });
@@ -498,7 +505,10 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
       }
       final pickup = _pickupDateTime;
       if (pickup == null || !isValidPreorderPickup(pickup)) {
-        setState(() => _pickupError = 'Chọn ngày giờ nhận (tối đa 30 ngày).');
+        setState(
+          () => _pickupError =
+              'Giờ nhận phải sau ít nhất 1 giờ và trong 30 ngày kể từ lúc đặt.',
+        );
         return;
       }
       if (_slotAvailable == false) {
@@ -1106,6 +1116,9 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
                       for (final slot in _pickupTimeSlots)
                         DropdownMenuItem<String>(
                           value: slot,
+                          enabled:
+                              _pickupForTime(slot) != null &&
+                              isValidPreorderPickup(_pickupForTime(slot)!),
                           child: Text(slot),
                         ),
                     ],
@@ -1130,6 +1143,12 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
           Text(
             _pickupError,
             style: const TextStyle(fontSize: 12.5, color: Color(0xFFB91C1C)),
+          ),
+        ] else ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Nhận sau ít nhất 1 giờ, tối đa 30 ngày.',
+            style: TextStyle(fontSize: 12.5, color: Color(0xFF476451)),
           ),
         ],
         if (_checkingSlotAvailability) ...[
