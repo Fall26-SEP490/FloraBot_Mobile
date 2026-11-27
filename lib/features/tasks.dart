@@ -7,6 +7,9 @@ import '../core/models.dart';
 import '../ui/common.dart';
 import 'technician_iot_health.dart';
 import 'seller_tasks.dart';
+import 'task_support.dart';
+import 'staff_stock.dart';
+import 'preorder_support.dart' show normalizeOrderQuery;
 
 class TasksPage extends StatefulWidget {
   const TasksPage(this.api, this.session, {super.key});
@@ -17,67 +20,184 @@ class TasksPage extends StatefulWidget {
 }
 
 class _TasksPageState extends State<TasksPage> {
-  String filter = '';
-  int revision = 0;
+  String filter = '', query = '', kiosk = '';
+  int page = 1;
+  final resourceKey = GlobalKey<ResourceViewState>();
+
+  Future<List<Json>> load() async {
+    final tasks = <String, Json>{};
+    for (var number = 1; ; number++) {
+      final data = await widget.api.get('/api/staff/tasks?page=$number');
+      final rows = itemsOf(data);
+      final before = tasks.length;
+      for (final row in rows) {
+        tasks[valueOf(row, 'id')] = row;
+      }
+      if (data is! Map || data['hasMore'] != true) return tasks.values.toList();
+      if (tasks.length == before) {
+        throw const ApiError(500, 'Chưa tải đủ công việc. Vui lòng thử lại.');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.session.role == AppRole.seller) {
       return SellerTasksPage(widget.api, widget.session);
     }
-    final owner = widget.session.role == AppRole.seller;
-    final base = owner
-        ? '/api/sellers/${widget.session.sellerId}/staff-tasks'
-        : '/api/staff/tasks';
-    return ApiListPage(
-      key: ValueKey('$filter:$revision'),
-      api: widget.api,
-      path: '$base${filter.isEmpty ? '' : '?status=$filter'}',
-      title: owner ? 'Việc của shop' : 'Công việc của tôi',
-      subtitle: owner
-          ? 'Theo dõi và duyệt báo cáo nạp hoa.'
-          : 'Chỉ hiển thị công việc bạn được giao.',
-      actions: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final code in [
-                '',
-                'ASSIGNED',
-                'IN_PROGRESS',
-                'SUBMITTED',
-                'COMPLETED',
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
+    return ResourceView(
+      key: resourceKey,
+      resourceKey: widget.session.id,
+      load: load,
+      builder: (context, data, state) {
+        final tasks = itemsOf(data);
+        final kiosks = {
+          for (final row in tasks)
+            valueOf(row, 'kioskId'): valueOf(row, 'kioskName'),
+        };
+        final selectedKiosk = kiosks.containsKey(kiosk) ? kiosk : '';
+        final search = normalizeOrderQuery(query);
+        final rows = tasks
+            .where(
+              (row) =>
+                  (filter.isEmpty || row['status'] == filter) &&
+                  (selectedKiosk.isEmpty || row['kioskId'] == selectedKiosk) &&
+                  (search.isEmpty ||
+                      normalizeOrderQuery(
+                        [
+                          row['kioskName'],
+                          row['address'],
+                          row['instructions'],
+                          row['report'],
+                          row['id'],
+                          taskKindText(row['kind']),
+                        ].whereType<String>().join(' '),
+                      ).contains(search)),
+            )
+            .toList();
+        const pageSize = 10;
+        final currentPage = page.clamp(
+          1,
+          ((rows.length + pageSize - 1) ~/ pageSize).clamp(1, 100000),
+        );
+        final visible = rows.skip((currentPage - 1) * pageSize).take(pageSize);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const PageTitle('Công việc của tôi', ''),
+            Wrap(
+              spacing: 6,
+              runSpacing: 2,
+              children: [
+                for (final code in [
+                  '',
+                  'ASSIGNED',
+                  'IN_PROGRESS',
+                  'SUBMITTED',
+                  'COMPLETED',
+                  'CANCELLED',
+                ])
+                  ChoiceChip(
                     selected: filter == code,
-                    label: Text(code.isEmpty ? 'Tất cả' : statusText(code)),
-                    onSelected: (_) => setState(() => filter = code),
+                    label: Text(
+                      code.isEmpty
+                          ? 'Tất cả'
+                          : code == 'IN_PROGRESS'
+                          ? 'Đang làm'
+                          : statusText(code),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onSelected: (_) => setState(() {
+                      filter = code;
+                      page = 1;
+                    }),
                   ),
-                ),
-            ],
-          ),
-        ),
-      ],
-      item: (context, row, state) => RecordCard(
-        title: valueOf(row, 'kioskName'),
-        subtitle:
-            '${row['kind'] == 'INCIDENT' ? 'Kiểm tra sự cố' : 'Nạp / giao hoa'}\n${valueOf(row, 'instructions', '')}',
-        status: row['status'],
-        onTap: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => TaskDetailPage(widget.api, widget.session, row),
+              ],
             ),
-          );
-          if (mounted) setState(() => revision++);
-        },
-      ),
+            const SizedBox(height: 12),
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Tìm công việc',
+                hintText: 'Tên kiosk, nội dung hoặc mã công việc',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() {
+                query = value;
+                page = 1;
+              }),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey(selectedKiosk),
+              initialValue: selectedKiosk,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Kiosk'),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('Tất cả kiosk')),
+                for (final entry in kiosks.entries)
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (value) => setState(() {
+                kiosk = value ?? '';
+                page = 1;
+              }),
+            ),
+            const SizedBox(height: 12),
+            if (rows.isEmpty) const InfoBox('Không có công việc phù hợp.'),
+            for (final row in visible)
+              RecordCard(
+                title: valueOf(row, 'kioskName'),
+                subtitle:
+                    '${taskKindText(row['kind'])}\n${valueOf(row, 'instructions', '')}',
+                status: row['status'],
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          TaskDetailPage(widget.api, widget.session, row),
+                    ),
+                  );
+                  if (mounted) await state.reload(background: true);
+                },
+              ),
+            if (rows.length > pageSize || currentPage > 1)
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  TextButton(
+                    onPressed: currentPage > 1
+                        ? () => setState(() => page = currentPage - 1)
+                        : null,
+                    child: const Text('Trang trước'),
+                  ),
+                  Text('Trang $currentPage'),
+                  TextButton(
+                    onPressed: currentPage * pageSize < rows.length
+                        ? () => setState(() => page = currentPage + 1)
+                        : null,
+                    child: const Text('Trang sau'),
+                  ),
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
+
+String taskKindText(dynamic kind) => switch (kind) {
+  'INCIDENT' => 'Kiểm tra sự cố',
+  'KIOSK_REMOVAL' => 'Tháo dỡ kiosk',
+  _ => 'Nạp / giao hoa',
+};
 
 class TaskDetailPage extends StatefulWidget {
   const TaskDetailPage(this.api, this.session, this.task, {super.key});
@@ -101,7 +221,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
           !state.busy &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
           (ModalRoute.of(context)?.isCurrent ?? false)) {
-        unawaited(state.reload());
+        unawaited(state.reload(background: true));
       }
     });
   }
@@ -131,12 +251,13 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   Future<Json> load() async {
     final detail = objectOf(await widget.api.get(path));
-    Json? inventory, preorders, quality;
+    Json? inventory, preorders, quality, stock;
     if (widget.session.role == AppRole.staff) {
       if (qualityTask) quality = await optional('/api/staff/tasks/$id/quality');
       inventory = await optional('/api/staff/tasks/$id/inventory-maintenance');
       if (inventory == null) {
         preorders = await optional('/api/staff/tasks/$id/preorders');
+        if (!qualityTask) stock = await optional('/api/staff/tasks/$id/stock');
       }
     }
     return {
@@ -144,6 +265,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       'inventory': inventory,
       'preorders': preorders,
       'quality': quality,
+      'stock': stock,
     };
   }
 
@@ -284,6 +406,31 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                       'Kiểm tra thông tin sự cố theo công việc.',
                     ),
                   ),
+                OutlinedButton.icon(
+                  onPressed: () => openTaskPage(
+                    context,
+                    EvidenceGallery(widget.api, '$path/evidence'),
+                  ),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Xem ảnh minh chứng'),
+                ),
+                if (widget.session.role == AppRole.technician &&
+                    task['kind'] == 'INCIDENT' &&
+                    detail['slotCode'] != null &&
+                    active)
+                  RepairReadinessPanel(widget.api, id),
+                if (active && data['stock'] is Map)
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await openTaskPage(
+                        context,
+                        StaffStockPage(widget.api, id),
+                      );
+                      if (mounted) await state.reload(background: true);
+                    },
+                    icon: const Icon(Icons.local_florist_outlined),
+                    label: const Text('Nạp hoa bán tại tủ'),
+                  ),
                 if (!owner && task['status'] == 'ASSIGNED')
                   FilledButton.icon(
                     onPressed: state.busy
@@ -356,6 +503,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                 ],
                 if (!owner &&
                     widget.session.role == AppRole.technician &&
+                    task['kind'] == 'INCIDENT' &&
+                    detail['slotCode'] != null &&
                     active) ...[
                   const SizedBox(height: 20),
                   FilledButton.icon(
@@ -397,7 +546,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                     onPressed: state.busy
                         ? null
                         : () {
-                            if (widget.session.role == AppRole.technician) {
+                            if (widget.session.role == AppRole.technician &&
+                                task['kind'] == 'INCIDENT') {
                               state.run(() async {
                                 final form = await askForm(
                                   context,
@@ -449,23 +599,28 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                         : () => transition(state, task, 'CANCELLED'),
                     child: const Text('Hủy công việc theo điều kiện'),
                   ),
-                const Divider(height: 32),
-                const Text(
-                  'Lịch sử',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Lịch sử công việc'),
+                  children: [
+                    for (final event in (detail['history'] as List? ?? []).map(
+                      objectOf,
+                    ))
+                      RecordCard(
+                        title: valueOf(event, 'actorName'),
+                        subtitle:
+                            '${valueOf(event, 'action')}\n${valueOf(event, 'report', '')}\n${dateText(event['createdAt'])}',
+                      ),
+                    if (detail['hasMore'] == true)
+                      TextButton(
+                        onPressed: () => openTaskPage(
+                          context,
+                          TaskHistoryPage(widget.api, path),
+                        ),
+                        child: const Text('Xem toàn bộ lịch sử'),
+                      ),
+                  ],
                 ),
-                for (final event in (detail['history'] as List? ?? []).map(
-                  objectOf,
-                ))
-                  RecordCard(
-                    title: valueOf(event, 'actorName'),
-                    subtitle:
-                        '${valueOf(event, 'action')}\n${valueOf(event, 'report', '')}\n${dateText(event['createdAt'])}',
-                  ),
-                if (detail['hasMore'] == true)
-                  const InfoBox(
-                    'Đang hiển thị trang lịch sử mới nhất. Lịch sử đầy đủ có trên cổng Web.',
-                  ),
               ],
             );
           },
@@ -658,8 +813,13 @@ class InstallationDetail extends StatelessWidget {
             ],
             if (row['technicianReport'] != null)
               InfoBox('Báo cáo: ${row['technicianReport']}'),
-            Text(
-              'Ảnh minh chứng đã gắn: ${(row['evidence'] as List? ?? []).length}',
+            OutlinedButton.icon(
+              onPressed: () =>
+                  openTaskPage(context, EvidenceGallery(api, '$base/evidence')),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(
+                'Ảnh minh chứng (${(row['evidence'] as List? ?? []).length})',
+              ),
             ),
             const InfoBox(
               'Chỉ Manager nghiệm thu và bàn giao. Gửi báo cáo chưa đồng nghĩa kiosk đã được bàn giao.',

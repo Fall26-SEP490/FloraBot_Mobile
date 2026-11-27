@@ -194,26 +194,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         InfoBox(widget.notice!),
                         const SizedBox(height: 12),
                       ],
-                      const Text(
-                        'Đăng nhập',
-                        style: TextStyle(
-                          fontSize: 28,
-                          height: 1.15,
-                          color: forest,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -.8,
+                      if (!widget.showBack)
+                        const Text(
+                          'Đăng nhập',
+                          style: TextStyle(
+                            fontSize: 28,
+                            height: 1.15,
+                            color: forest,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -.8,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 7),
-                      const Text(
-                        'Nhập email và mật khẩu của bạn.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF617568),
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
                       TextFormField(
                         controller: email,
                         keyboardType: TextInputType.emailAddress,

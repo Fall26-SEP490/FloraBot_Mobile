@@ -1,6 +1,6 @@
 # FloraBot Mobile — chức năng và kế hoạch nghiệm thu
 
-Ngày cập nhật: 21/11/2026. Công nghệ: Flutter, Dart, Material 3; Android/iOS, Web dùng để kiểm tra giao diện. Đây là app dùng API thật, không có tài khoản hoặc dữ liệu giả để thay thế backend.
+Ngày cập nhật: 27/11/2026. Công nghệ: Flutter, Dart, Material 3; Android/iOS, Web dùng để kiểm tra giao diện. Đây là app dùng API thật, không có tài khoản hoặc dữ liệu giả để thay thế backend.
 
 ## 1. Vai trò và giới hạn
 
@@ -73,7 +73,7 @@ Preorder là nhóm chức năng của CUSTOMER, không tạo role PREORDER mới
 | Phân tích | Thống kê bán theo mùa; yêu cầu dự báo; thể hiện rõ dữ liệu thiếu/cảnh báo từ AI |
 | Gói thuê | Xem gói và kỳ thuê, yêu cầu gia hạn và mở thanh toán; quy trình thuê mới/ngoại lệ mở cổng Web để đăng nhập bình thường |
 
-Sản phẩm chưa có nút chuyển toàn bộ trạng thái khả dụng; quy trình duyệt sản phẩm, kế toán/đối soát/rút tiền và hồ sơ thuê mới tiếp tục trên Web. Đây là phạm vi mở rộng riêng, không giả lập bằng thao tác đổi trạng thái tại app.
+Mẫu hoa có bật/ngừng bán theo API. Admin và Operations Manager tiếp tục dùng Web; mobile chỉ có Customer, Seller, Seller Staff và Technician.
 
 ## 6. CUSTOMER/preorder: mua và nhận hoa
 
@@ -98,7 +98,7 @@ App phục vụ preorder. Mua walk-in tại màn kiosk vẫn theo luồng kiosk 
 - Chi tiết công việc Staff trả thêm version/status để cập nhật đúng phiên bản.
 - Quy trình xuất OpenAPI hiện hữu đã bao gồm endpoint mới; không sửa generated contract FE bằng tay.
 
-Chưa triển khai những thay đổi này lên server. Không đổi schema DB. API/domain hiện hữu tiếp tục quyết định tenant, task assignment, owner grant và chuyển trạng thái.
+Đã đối chiếu hợp đồng với BE main; trạng thái triển khai host cần kiểm tra riêng. Mobile không đổi schema DB. API/domain hiện hữu tiếp tục quyết định tenant, task assignment, owner grant và chuyển trạng thái.
 
 Các hạng mục chưa có trong bản này:
 
@@ -129,3 +129,40 @@ Unit/widget tests không thay cho nghiệm thu cảm biến, email, thanh toán 
 - Mục Khám phá có Gợi ý chọn hoa bằng AI, gọi POST /api/shop/flower-chat với mode PREORDER và ngân sách. Ba lựa chọn loại hoa/màu/chất liệu dùng cùng mã của form seller; được đưa vào câu hỏi tư vấn. Các đặc điểm được gửi trong câu hỏi tư vấn; trước khi hiển thị, app đối chiếu từng gợi ý với API catalog theo productId/kioskId, yêu cầu đủ tag đã chọn và giá hiện tại trong ngân sách. Không xác minh được thì không hiển thị gợi ý đó. Mỗi tên tìm tối đa 10 trang; không bù thêm mẫu ngoài danh sách AI. Nút Xem mẫu đưa tên gợi ý về danh mục để tiếp tục chọn/đặt.
 - Các thao tác tiền/OTP chỉ được nghiệm thu qua API staging và thiết bị thật; unit/widget tests không chứng minh thanh toán hoặc cửa.
 - Push, Google OAuth native và verified App Links chưa cấu hình theo xác nhận của chủ dự án. Không thêm Firebase credentials giả hoặc hạ quyền bảo mật để thay thế.
+
+
+## 9. Đối chiếu Web bổ sung ngày 27/11/2026
+
+- Customer: xem/gửi đánh giá một lần khi BE cho phép; ảnh JPEG/PNG/WebP tối đa 2 MB; đọc đánh giá cả shop và phân trang. Nút đánh giá nằm trong chi tiết mẫu hoa.
+- Customer: tìm kiosk theo tên/mã/địa chỉ, lọc trạng thái, ưu tiên trực tuyến, tìm gần tôi khi được cấp vị trí, xem bản đồ Goong và chỉ đường. Khi không có khóa bản đồ vẫn dùng được danh sách/chỉ đường. Không lấy vị trí nền.
+- Customer: từ Tài khoản → Thuê kiosk / Mở shop, tạo hồ sơ lần đầu với shop, ngân hàng, số ô, vị trí và phiên bản bảng giá; thanh toán/đối chiếu/hủy theo trạng thái BE. Chỉ đăng nhập lại dưới Seller sau khi BE hoàn tất chuyển vai trò; app không tự nâng quyền.
+- Seller: tư vấn bán theo dịp gọi seasonal-advice độc lập với seasonal-forecast; xuất tệp XLSX từ endpoint sales.csv đúng bộ lọc ngày qua màn chia sẻ của thiết bị. ID và dữ liệu người dùng là ô chữ, không chạy công thức từ CSV.
+- Seller Staff: ngoài nhiệm vụ kho và preorder, có nạp hoa bán tại tủ cho task tổng quát qua stock. Khi mất phản hồi giữ mã thao tác, kiểm tra actions trước khi gửi lại để tránh nạp trùng.
+- Technician/Seller Staff: xem ảnh riêng tư, phóng to, phân trang; lịch sử công việc truy xuất được các trang cũ. Technician có bảng lý do BE chặn gửi báo cáo và kiểm tra lại.
+- Technician: INCIDENT gửi resolve-incident, KIOSK_REMOVAL gửi transition SUBMITTED. Lắp đặt vẫn do Manager nghiệm thu trên Web; ảnh lắp đặt có danh sách xem lại.
+- Chung: tải nền gộp yêu cầu đang chạy và giữ nội dung; chuyển trang/bộ lọc không dùng dữ liệu của trang trước. Thanh phân trang tự xuống dòng ở màn hình hẹp.
+
+### Kiểm chứng
+
+- flutter analyze; flutter test; flutter build apk --debug.
+- Test bổ sung kiểm tra payload Customer, nạp hoa khi mất phản hồi, quyền đánh giá/ảnh, phân trang ảnh/lịch sử, giới hạn báo giá, xử lý refresh khi xuất CSV, XLSX không chạy công thức và vị trí bị từ chối.
+- Thanh toán thật, camera/GPS trên thiết bị thật, thao tác cửa/cảm biến và nghiệm thu Manager cần nghiệm thu liên vai trò với dữ liệu test được nhóm cho phép. Bộ test không tự tạo dữ liệu thật trên host.
+- Khóa Goong truyền bằng dart-define hoặc cấu hình local bị Git ignore; không đưa khóa, token hay ngân hàng vào mã nguồn/log.
+
+
+## 10. UI/UX mobile
+
+- Giữ đầy đủ nghiệp vụ và quyền của bốn vai trò; thay đổi trong phần này chỉ là trình bày/điều hướng.
+- Tổng quan Technician/Staff tập trung vào công việc, lắp đặt/trao đổi và thiết bị; bỏ banner quảng bá và số đếm của riêng trang đầu dễ gây hiểu nhầm.
+- Trạng thái có chữ, biểu tượng và màu riêng cho đã giao, đang làm, chờ duyệt, hoàn tất và sự cố. Kiểm thử độ tương phản chữ tối thiểu 4,5:1.
+- Thẻ danh sách có dấu mở chi tiết, nội dung dài xem đầy đủ trong chi tiết; lịch sử thu gọn nhưng vẫn truy cập tất cả trang.
+- Bộ lọc công việc tự xuống dòng; phân trang một trang được ẩn; màn vận hành dùng nền dịu, Customer giữ nhận diện hoa.
+- Form đăng nhập bỏ tiêu đề và câu hướng dẫn lặp. Không đổi cách xác thực, endpoint hay điều kiện chuyển trạng thái.
+
+### Rà tiếp UI/UX ngày 27/11/2026
+
+- Thiết bị: đổi tiêu đề thành “Tín hiệu thiết bị”, nhóm riêng từng ô, bỏ tên linh kiện khỏi dòng chính; phần hướng dẫn phần cứng vẫn mở xem được. Không suy diễn tín hiệu phát hiện vật thành đã giao hoa và không hiển thị số đo cũ như dữ liệu mới.
+- Customer: thống nhất tên “Yêu cầu đặt trước”; giá tạm tính vẫn ở chân form. Seller vẫn dùng báo giá đúng nghiệp vụ.
+- Kỳ thuê và nhân viên/công việc: dùng chung kiểu trạng thái có màu và biểu tượng, giữ nhãn riêng theo ngữ cảnh; phân trang tự xuống dòng khi thiếu chỗ.
+- Form dùng chung: thêm nút đóng, cho thông báo lỗi xuống dòng; kiểm tra khả năng cuộn khi mở bàn phím ở màn rộng 320 px.
+- Xác minh: 177 unit/widget tests đạt; flutter analyze không báo lỗi. Không thay endpoint, payload, phân quyền hoặc guard nghiệm thu BE. Chưa thay thế kiểm thử thiết bị và các luồng thanh toán/cửa thật.

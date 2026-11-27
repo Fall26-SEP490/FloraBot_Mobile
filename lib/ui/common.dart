@@ -42,19 +42,102 @@ Future<void> navigateAddress(String address) => openSafeLink(
   'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}',
 );
 
+({Color background, Color foreground, IconData icon}) statusAppearance(
+  dynamic status,
+) => switch ('$status'.toUpperCase()) {
+  'IN_PROGRESS' || 'INSTALLING' || 'DISPENSING' => (
+    background: const Color(0xFFE9F2FC),
+    foreground: const Color(0xFF185E9B),
+    icon: Icons.autorenew_rounded,
+  ),
+  'SUBMITTED' ||
+  'AWAITING_HANDOVER' ||
+  'AWAITING_PAYMENT' ||
+  'PENDING_PAYMENT' ||
+  'QUOTED' ||
+  'REQUESTED' ||
+  'PAST_DUE' ||
+  'HELD' ||
+  'NEEDSINSPECTION' ||
+  'MAINTENANCE' => (
+    background: const Color(0xFFFFF2D7),
+    foreground: const Color(0xFF8B5B08),
+    icon: Icons.schedule_rounded,
+  ),
+  'ASSIGNED' || 'SCHEDULED' => (
+    background: const Color(0xFFF0EBFB),
+    foreground: const Color(0xFF69459C),
+    icon: Icons.assignment_outlined,
+  ),
+  'FAULT' ||
+  'OFFLINE' ||
+  'DISPENSE_FAILED' ||
+  'DISPUTED' ||
+  'EXPIRED' ||
+  'REJECTED' => (
+    background: const Color(0xFFFDECE9),
+    foreground: const Color(0xFFAD372C),
+    icon: Icons.error_outline_rounded,
+  ),
+  'CANCELLED' || 'INACTIVE' || 'DISABLED' || 'ARCHIVED' || 'TERMINATED' => (
+    background: const Color(0xFFEEF1F3),
+    foreground: const Color(0xFF52616B),
+    icon: Icons.block_outlined,
+  ),
+  'COMPLETED' ||
+  'ACTIVE' ||
+  'ONLINE' ||
+  'PAID' ||
+  'STOCKED' ||
+  'FULFILLED' ||
+  'REFUNDED' ||
+  'READY' ||
+  'RECOVERED' ||
+  'LOADED' => (
+    background: const Color(0xFFE8F3EB),
+    foreground: forest,
+    icon: Icons.check_circle_outline_rounded,
+  ),
+  _ => (
+    background: const Color(0xFFF0F3F1),
+    foreground: const Color(0xFF5B6B63),
+    icon: Icons.info_outline_rounded,
+  ),
+};
+
 class StatusChip extends StatelessWidget {
-  const StatusChip(this.status, {super.key});
+  const StatusChip(this.status, {this.label, super.key});
   final dynamic status;
+  final String? label;
   @override
-  Widget build(BuildContext context) => Chip(
-    label: Text(
-      statusText(status),
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-    ),
-    backgroundColor: const Color(0xFFE9F1E8),
-    side: BorderSide.none,
-    padding: const EdgeInsets.symmetric(horizontal: 3),
-  );
+  Widget build(BuildContext context) {
+    final appearance = statusAppearance(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: appearance.background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(appearance.icon, size: 14, color: appearance.foreground),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label ?? statusText(status),
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                color: appearance.foreground,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class InfoBox extends StatelessWidget {
@@ -117,6 +200,8 @@ class RecordCard extends StatelessWidget {
                     const SizedBox(height: 7),
                     Text(
                       subtitle!,
+                      maxLines: onTap == null ? null : 3,
+                      overflow: onTap == null ? null : TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Color(0xFF617568),
                         height: 1.5,
@@ -126,7 +211,17 @@ class RecordCard extends StatelessWidget {
                 ],
               ),
             ),
-            ?trailing,
+            if (trailing != null)
+              trailing!
+            else if (onTap != null)
+              const Padding(
+                padding: EdgeInsets.only(left: 8, top: 2),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: Color(0xFF718478),
+                ),
+              ),
           ],
         ),
       ),
@@ -180,11 +275,13 @@ class PageTitle extends StatelessWidget {
           ),
           status: status,
         ),
-        const SizedBox(height: 6),
-        Text(
-          subtitle,
-          style: const TextStyle(color: Color(0xFF617568), height: 1.5),
-        ),
+        if (subtitle.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Color(0xFF617568), height: 1.5),
+          ),
+        ],
       ],
     ),
   );
@@ -210,10 +307,22 @@ class ResourceViewState extends State<ResourceView>
     with WidgetsBindingObserver {
   late Future<dynamic> future;
   bool busy = false;
+  Future<dynamic>? _pending;
+  int _generation = 0;
+
+  Future<dynamic> _read() {
+    late final Future<dynamic> next;
+    next = Future<dynamic>.sync(widget.load).whenComplete(() {
+      if (identical(_pending, next)) _pending = null;
+    });
+    _pending = next;
+    return next;
+  }
+
   @override
   void initState() {
     super.initState();
-    future = widget.load();
+    future = _read();
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -229,26 +338,38 @@ class ResourceViewState extends State<ResourceView>
         mounted &&
         !busy &&
         (ModalRoute.of(context)?.isCurrent ?? true)) {
-      unawaited(reload());
+      unawaited(reload(background: true));
     }
   }
 
   @override
   void didUpdateWidget(ResourceView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.resourceKey != widget.resourceKey) future = widget.load();
+    if (oldWidget.resourceKey != widget.resourceKey) {
+      _generation++;
+      future = _read();
+    }
   }
 
-  Future<void> reload() async {
+  Future<void> reload({bool background = false}) async {
     if (!mounted) return;
-    final next = widget.load();
-    setState(() {
-      future = next;
-    });
+    final generation = _generation;
+    final pending = _pending;
+    final next = pending ?? _read();
+    if (pending == null && !background) {
+      setState(() {
+        future = next;
+      });
+    }
     try {
-      await future;
+      final data = await next;
+      if (background && mounted && generation == _generation) {
+        setState(() {
+          future = Future<dynamic>.value(data);
+        });
+      }
     } catch (_) {
-      /* Render the error, with explicit retry. */
+      // Background failures keep the last view; explicit reload displays errors.
     }
   }
 
@@ -256,6 +377,11 @@ class ResourceViewState extends State<ResourceView>
     if (busy) return;
     setState(() => busy = true);
     try {
+      // Finish an older read before a mutation so its result cannot hide changes.
+      try {
+        await _pending;
+      } catch (_) {}
+      if (!mounted) return;
       await action();
       if (mounted) await reload();
     } catch (e) {
@@ -271,9 +397,11 @@ class ResourceViewState extends State<ResourceView>
   @override
   Widget build(BuildContext context) {
     final body = FutureBuilder<dynamic>(
+      key: ValueKey(widget.resourceKey),
       future: future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
+        if (snapshot.connectionState != ConnectionState.done &&
+            !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasError) {
@@ -367,24 +495,28 @@ class _ApiListPageState extends State<ApiListPage> {
           ...items.map(
             (row) => widget.item(context, {...row, '_mobilePage': page}, state),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: page > 1 && !state.busy
-                    ? () => setState(() => page--)
-                    : null,
-                child: const Text('Trang trước'),
-              ),
-              Text('$page'),
-              TextButton(
-                onPressed: hasMore && !state.busy
-                    ? () => setState(() => page++)
-                    : null,
-                child: const Text('Trang sau'),
-              ),
-            ],
-          ),
+          if (page > 1 || hasMore)
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                TextButton(
+                  onPressed: page > 1 && !state.busy
+                      ? () => setState(() => page--)
+                      : null,
+                  child: const Text('Trang trước'),
+                ),
+                Text('$page'),
+                TextButton(
+                  onPressed: hasMore && !state.busy
+                      ? () => setState(() => page++)
+                      : null,
+                  child: const Text('Trang sau'),
+                ),
+              ],
+            ),
         ],
       );
     },
@@ -468,7 +600,21 @@ class _InputSheetState extends State<_InputSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(widget.title, style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Đóng biểu mẫu',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
             if (widget.description != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -523,6 +669,7 @@ class _InputSheetState extends State<_InputSheet> {
                             : TextInputType.text,
                         decoration: InputDecoration(
                           labelText: f.label,
+                          errorMaxLines: 3,
                           suffixIcon: f.picker == null
                               ? null
                               : const Icon(Icons.arrow_drop_down),

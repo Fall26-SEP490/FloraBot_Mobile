@@ -7,9 +7,11 @@ class InventoryFilter extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.showLabel = false,
     super.key,
   });
   final String value;
+  final bool showLabel;
   final Map<String, String> options;
   final ValueChanged<String> onChanged;
 
@@ -48,17 +50,31 @@ class InventoryFilter extends StatelessWidget {
         ),
     ],
     child: Container(
-      width: 44,
-      height: 44,
+      width: showLabel ? null : 44,
+      height: showLabel ? 48 : 44,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: const Color(0xFFD4E0D4)),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Center(
-        child: Icon(Icons.filter_list, size: 24, color: forest),
-      ),
+      child: showLabel
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.filter_list_rounded, size: 20, color: forest),
+                const SizedBox(width: 8),
+                Text(
+                  options[value] ?? '',
+                  style: const TextStyle(fontSize: 14, color: forest),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.expand_more_rounded, size: 18, color: forest),
+              ],
+            )
+          : const Center(
+              child: Icon(Icons.filter_list, size: 24, color: forest),
+            ),
     ),
   );
 }

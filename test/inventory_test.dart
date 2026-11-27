@@ -120,35 +120,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Không có kiosk phù hợp.'), findsOneWidget);
   });
-  testWidgets('status filter shares search row and opens a compact menu', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final api = client();
-    addTearDown(api.dispose);
-    await render(tester, KiosksPage(api, seller));
-    final search = tester.getRect(find.byType(TextField));
-    final filterMenu = find.byWidgetPredicate(
-      (w) =>
-          w is PopupMenuButton<String> && w.tooltip == 'Lọc trạng thái: Tất cả',
-    );
-    final filter = tester.getRect(filterMenu);
-    expect(search.top, filter.top);
-    expect(search.height, filter.height);
-    await tester.tap(filterMenu);
-    await tester.pumpAndSettle();
-    expect(
-      tester.getSize(find.byType(PopupMenuItem<String>).first).width,
-      lessThanOrEqualTo(200),
-    );
-    await tester.tap(find.text('Trực tuyến'));
-    await tester.pumpAndSettle();
-    expect(find.text('Không có kiosk phù hợp.'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'status filter shows selection below full-width search and opens compact menu',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = client();
+      addTearDown(api.dispose);
+      await render(tester, KiosksPage(api, seller));
+      final search = tester.getRect(find.byType(TextField));
+      final filterMenu = find.byWidgetPredicate(
+        (w) =>
+            w is PopupMenuButton<String> &&
+            w.tooltip == 'Lọc trạng thái: Tất cả',
+      );
+      final filter = tester.getRect(filterMenu);
+      expect(filter.top, greaterThanOrEqualTo(search.bottom + 8));
+      expect(filter.height, greaterThanOrEqualTo(48));
+      expect(find.text('Tất cả'), findsOneWidget);
+      await tester.tap(filterMenu);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(PopupMenuItem<String>).first).width,
+        lessThanOrEqualTo(200),
+      );
+      await tester.tap(find.text('Trực tuyến'));
+      await tester.pumpAndSettle();
+      expect(find.text('Không có kiosk phù hợp.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   for (final width in [360.0, 800.0]) {
     testWidgets('slots show searchable flower name at $width', (tester) async {
       tester.view.physicalSize = Size(width, 1000);

@@ -65,20 +65,8 @@ class _GuestWorkspaceState extends State<GuestWorkspace> {
     appBar: selected == 0
         ? AppBar(
             centerTitle: false,
-            title: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.local_florist_rounded),
-                SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'FloraBot',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
+            toolbarHeight: 64,
+            title: const BrandWordmark(height: 52),
             actions: [
               TextButton(
                 onPressed: () {
@@ -179,7 +167,7 @@ class _WorkspaceState extends State<Workspace> {
         'Tổng quan',
         'Công việc',
         'Lắp đặt',
-        'Sức khỏe',
+        'Thiết bị',
         'Tài khoản',
       ],
       AppRole.staff => ['Tổng quan', 'Công việc', 'Tài khoản'],
@@ -254,7 +242,7 @@ class _WorkspaceState extends State<Workspace> {
       };
     }
     return Scaffold(
-      drawer: user.role == AppRole.seller && active == 0
+      drawer: user.role == AppRole.seller
           ? _SellerOperationsDrawer(
               api: api,
               user: user,
@@ -264,20 +252,11 @@ class _WorkspaceState extends State<Workspace> {
               },
             )
           : null,
-      appBar: active == 0
+      appBar: active == 0 || user.role == AppRole.seller
           ? AppBar(
               centerTitle: true,
-              title: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.local_florist_rounded),
-                  SizedBox(width: 8),
-                  Text(
-                    'FloraBot',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
+              toolbarHeight: 64,
+              title: const BrandWordmark(height: 52),
             )
           : null,
       body: SafeArea(
@@ -410,10 +389,23 @@ class _SellerOperationsDrawer extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      leading: Icon(entry.$1, size: 21, color: forest),
+                      minVerticalPadding: 14,
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEDF4EF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(entry.$1, size: 22, color: forest),
+                      ),
+                      trailing: const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: Color(0xFF718478),
+                      ),
                       title: Text(
                         entry.$2,
-                        style: const TextStyle(fontSize: 14),
+                        style: const TextStyle(fontSize: 15),
                       ),
                       onTap: () => onOpen(entry.$2, entry.$3()),
                     ),
@@ -479,85 +471,45 @@ class OverviewPage extends StatelessWidget {
       load: () => api.get(path),
       builder: (context, data, state) {
         final items = itemsOf(data);
-        final waiting = items
-            .where(
-              (r) => [
-                'ASSIGNED',
-                'SUBMITTED',
-                'REQUESTED',
-                'QUOTED',
-                'AWAITING_PAYMENT',
-              ].contains(r['status'] ?? r['orderStatus'] ?? r['state']),
-            )
-            .length;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            WorkspaceWelcome(session),
+            PageTitle('Xin chào, ${session.name}', session.role.label),
             if (session.sellerStatus != null &&
                 session.sellerStatus != 'ACTIVE')
               InfoBox(
-                'Shop: ${statusText(session.sellerStatus)}. Một số thao tác có thể bị giới hạn theo hợp đồng.',
+                'Shop: ${statusText(session.sellerStatus)}',
                 warning: true,
               ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: RecordCard(
-                    title: '$waiting',
-                    subtitle: 'Cần chú ý trên trang này',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: RecordCard(
-                    title: '${items.length}',
-                    subtitle: 'Mục trên trang hiện tại',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Bắt đầu từ đây',
-              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-            ),
             RecordCard(
-              title: switch (session.role) {
-                AppRole.technician || AppRole.staff => 'Công việc được giao',
-                AppRole.seller => 'Kiểm tra hoa tại tủ',
-                AppRole.customer => 'Khám phá mẫu hoa',
-              },
-              subtitle: session.role.description,
+              title: 'Công việc được giao',
               onTap: () => navigate(1),
+              trailing: const Icon(Icons.assignment_outlined, color: forest),
             ),
             RecordCard(
               title: session.role == AppRole.technician
-                  ? 'Lịch lắp đặt kiosk'
-                  : session.role == AppRole.staff
-                  ? 'Trao đổi với chủ shop'
-                  : 'Theo dõi đơn đặt trước',
-              subtitle: 'Xem trạng thái mới nhất từ hệ thống.',
+                  ? 'Lắp đặt kiosk'
+                  : 'Nhắn với chủ shop',
               onTap: () => navigate(2),
+              trailing: Icon(
+                session.role == AppRole.technician
+                    ? Icons.handyman_outlined
+                    : Icons.chat_bubble_outline,
+                color: forest,
+              ),
             ),
-            if (session.role == AppRole.customer)
-              const InfoBox(
-                'Mã nhận hoa 8 số được gửi qua email sau khi shop đã nạp đơn. Bạn nhập mã tại đúng kiosk trong khung giờ nhận.',
+            if (session.role == AppRole.technician)
+              RecordCard(
+                title: 'Tình trạng thiết bị',
+                onTap: () => navigate(3),
+                trailing: const Icon(Icons.sensors_outlined, color: forest),
               ),
-            if (session.role == AppRole.technician ||
-                session.role == AppRole.staff)
-              const InfoBox(
-                'Chỉ lấy OTP trong đúng công việc đang thực hiện. Không tự xác nhận cửa mở hoặc hàng đã nạp khi chưa có phản hồi hợp lệ.',
-              ),
-            const FlowerJourney(),
             const SizedBox(height: 16),
             const Text(
               'Gần đây',
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
             ),
-            if (items.isEmpty)
-              const InfoBox('Chưa có công việc hoặc đơn đặt trong danh sách.'),
+            if (items.isEmpty) const InfoBox('Chưa có công việc.'),
             for (final item in items.take(3))
               RecordCard(
                 title: valueOf(
@@ -570,6 +522,20 @@ class OverviewPage extends StatelessWidget {
                   'instructions',
                   valueOf(item, 'orderCode', ''),
                 ),
+                onTap: () async {
+                  if (session.role == AppRole.technician ||
+                      session.role == AppRole.staff) {
+                    await Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TaskDetailPage(api, session, item),
+                      ),
+                    );
+                    if (context.mounted) await state.reload(background: true);
+                  } else {
+                    navigate(1);
+                  }
+                },
                 status: item['status'] ?? item['orderStatus'] ?? item['state'],
               ),
           ],

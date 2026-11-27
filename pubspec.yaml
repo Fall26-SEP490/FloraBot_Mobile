@@ -46,6 +46,11 @@ dependencies:
   signalr_netcore: ^1.4.4
   mobile_scanner: ^7.5.0
   maplibre_gl: 0.28.0
+  geolocator: ^14.1.2
+  share_plus: ^13.3.1
+  cross_file: ^0.3.5+5
+  csv: ^6.0.0
+  archive: ^4.7.1
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +75,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/images/flora-rose-logo.webp
     - assets/config/
     - assets/data/vietnam_bank_list.json
 

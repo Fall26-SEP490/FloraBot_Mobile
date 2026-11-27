@@ -84,6 +84,14 @@ const statusLabels = {
   'REJECTED': 'Đã từ chối',
   'EXPIRED': 'Đã hết hạn',
   'FULFILLED': 'Đã nạp hoa',
+  'SCHEDULED': 'Đã hẹn lắp đặt',
+  'INSTALLING': 'Đang lắp đặt',
+  'AWAITING_HANDOVER': 'Chờ bàn giao',
+  'PENDING_PAYMENT': 'Chờ thanh toán',
+  'DISPUTED': 'Đang khiếu nại',
+  'READY': 'Sẵn sàng',
+  'ARCHIVED': 'Đã lưu trữ',
+  'TERMINATED': 'Đã chấm dứt',
 };
 String statusText(dynamic status) =>
     statusLabels[status] ?? status?.toString() ?? 'Chưa xác định';

@@ -11,6 +11,8 @@ import '../ui/common.dart';
 import 'inventory.dart';
 import 'chat.dart';
 import 'receipt.dart';
+import 'customer_reviews.dart';
+import 'customer_kiosks.dart';
 import '../ui/customer_flower_card.dart';
 import 'customer_catalog_filters.dart';
 import 'customer_preorder_form.dart';
@@ -20,14 +22,17 @@ Future<DateTime?> choosePickup(
   DateTime? initial,
 }) async {
   final now = DateTime.now();
-  final start = initial != null && initial.isAfter(now)
+  final earliest = now.add(quoteMinLead);
+  final latest = now.add(quoteMaxLead);
+  final start =
+      initial != null && initial.isAfter(earliest) && initial.isBefore(latest)
       ? initial
       : now.add(const Duration(hours: 2));
   final day = await showDatePicker(
     context: context,
     initialDate: start,
     firstDate: DateTime(now.year, now.month, now.day),
-    lastDate: now.add(const Duration(days: 365)),
+    lastDate: latest,
   );
   if (day == null || !context.mounted) return null;
   final time = await showTimePicker(
@@ -36,9 +41,8 @@ Future<DateTime?> choosePickup(
   );
   if (time == null) return null;
   final result = DateTime(day.year, day.month, day.day, time.hour, time.minute);
-  if (!result.isAfter(DateTime.now())) {
-    throw const ApiError(400, 'Lịch nhận phải ở tương lai.');
-  }
+  final error = quotePickupError(result);
+  if (error != null) throw ApiError(400, error);
   return result;
 }
 
@@ -49,6 +53,7 @@ class CatalogPage extends StatefulWidget {
     this.api,
     this.session, {
     this.onOpenOrders,
+    this.initialSearch = '',
     this.onGuestOrder,
     this.onGuestChat,
     this.pendingOrder,
@@ -58,6 +63,7 @@ class CatalogPage extends StatefulWidget {
   });
   final ApiClient api;
   final Session? session;
+  final String initialSearch;
   final VoidCallback? onOpenOrders;
   final Future<void> Function(BuildContext, Json, List<Json>)? onGuestOrder;
   final Future<void> Function(BuildContext, Json)? onGuestChat;
@@ -79,6 +85,8 @@ class _CatalogPageState extends State<CatalogPage> {
   @override
   void initState() {
     super.initState();
+    search = widget.initialSearch.trim();
+    overviewSearch.text = search;
     _resumePendingIfNeeded();
   }
 
@@ -150,6 +158,17 @@ class _CatalogPageState extends State<CatalogPage> {
       MaterialPageRoute(
         builder: (detailContext) => CustomerFlowerDetail(
           item: row,
+          onReviews: () => Navigator.push<void>(
+            detailContext,
+            MaterialPageRoute(
+              builder: (_) => CustomerReviewsPage(
+                widget.api,
+                productId: '${row['productId']}',
+                sellerId: sellerId,
+                canReview: widget.session?.role == AppRole.customer,
+              ),
+            ),
+          ),
           onChat: sellerId.isEmpty
               ? null
               : () {
@@ -170,23 +189,34 @@ class _CatalogPageState extends State<CatalogPage> {
     if (order == true && mounted) await book(state, row, rows: rows);
   }
 
-  Future<void> openAdvisor() async {
-    final selected = await openPage<String>(
-      context,
-      'Gợi ý chọn hoa',
-      FlowerAdvisorPage(widget.api),
-    );
-    if (selected != null && mounted) {
-      final query = selected.length > 100
-          ? selected.substring(0, 100)
-          : selected;
-      setState(() {
-        search = query.trim();
-        overviewSearch.text = search;
-        visibleFlowers = 6;
-      });
-    }
-  }
+  Future<void> openAdvisor() => openPage<void>(
+    context,
+    'Gợi ý chọn hoa',
+    FlowerAdvisorPage(
+      widget.api,
+      onViewSuggestion: (suggestion) async {
+        final name = valueOf(suggestion, 'name', '');
+        final query = name.length > 100 ? name.substring(0, 100) : name;
+        await openPage<void>(
+          context,
+          'Mẫu hoa gợi ý',
+          CatalogPage(
+            widget.api,
+            widget.session,
+            initialSearch: query,
+            onGuestOrder: widget.onGuestOrder,
+            onGuestChat: widget.onGuestChat,
+            onOpenOrders: widget.onOpenOrders == null
+                ? null
+                : () {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    widget.onOpenOrders!();
+                  },
+          ),
+        );
+      },
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => ResourceView(
@@ -241,7 +271,7 @@ class _CatalogPageState extends State<CatalogPage> {
                     ),
                   ),
                   onPressed: state.busy ? null : openAdvisor,
-                  icon: const Icon(Icons.auto_awesome, size: 21),
+                  icon: const Icon(Icons.local_florist_outlined, size: 21),
                 ),
               ),
               const SizedBox(width: 8),
@@ -269,6 +299,19 @@ class _CatalogPageState extends State<CatalogPage> {
                 ),
               ),
             ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CustomerKiosksPage(widget.api),
+                ),
+              ),
+              icon: const Icon(Icons.place_outlined),
+              label: const Text('Tìm kiosk'),
+            ),
           ),
           const SizedBox(height: 16),
           if (flowers.isEmpty)
@@ -418,6 +461,45 @@ class _OrdersPageState extends State<OrdersPage> {
     _ => preorderState(row) == code,
   };
 
+  Widget filterChip(String code, String label, List<Json> rows) {
+    final selected = filter == code;
+    final count = code == 'ALL'
+        ? rows.length
+        : rows.where((row) => matchesFilter(row, code)).length;
+    return ChoiceChip(
+      label: Text(code == 'ALL' || count == 0 ? label : '$label ($count)'),
+      selected: selected,
+      showCheckmark: false,
+      materialTapTargetSize: seller
+          ? MaterialTapTargetSize.padded
+          : MaterialTapTargetSize.shrinkWrap,
+      selectedColor: const Color(0xFFE4EFE8),
+      backgroundColor: Colors.white,
+      side: BorderSide(
+        color: selected
+            ? forest
+            : code == 'ATTENTION' && count > 0
+            ? const Color(0xFFF3C677)
+            : const Color(0xFFD6E1D8),
+      ),
+      labelStyle: TextStyle(
+        fontSize: seller ? 14 : 12.5,
+        fontWeight: selected || (code == 'ATTENTION' && count > 0)
+            ? FontWeight.w700
+            : FontWeight.w500,
+        color: selected
+            ? forest
+            : code == 'ATTENTION' && count > 0
+            ? const Color(0xFF925B0A)
+            : const Color(0xFF476451),
+      ),
+      onSelected: (_) => setState(() {
+        filter = code;
+        page = 1;
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ResourceView(
     load: () => allPreorders(widget.api, base),
@@ -508,62 +590,28 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          if (seller)
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                for (var i = 0; i < _filters.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 8),
-                  Builder(
-                    builder: (_) {
-                      final (code, label) = _filters[i];
-                      final selected = filter == code;
-                      final count = code == 'ALL'
-                          ? allRows.length
-                          : allRows
-                                .where((row) => matchesFilter(row, code))
-                                .length;
-                      final text = code == 'ALL' || count == 0
-                          ? label
-                          : '$label ($count)';
-                      return ChoiceChip(
-                        label: Text(text),
-                        selected: selected,
-                        showCheckmark: false,
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        selectedColor: const Color(0xFFE4EFE8),
-                        backgroundColor: Colors.white,
-                        side: BorderSide(
-                          color: selected
-                              ? forest
-                              : code == 'ATTENTION' && count > 0
-                              ? const Color(0xFFF3C677)
-                              : const Color(0xFFD6E1D8),
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight:
-                              selected || (code == 'ATTENTION' && count > 0)
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: selected
-                              ? forest
-                              : code == 'ATTENTION' && count > 0
-                              ? const Color(0xFF925B0A)
-                              : const Color(0xFF476451),
-                        ),
-                        onSelected: (_) => setState(() {
-                          filter = code;
-                          page = 1;
-                        }),
-                      );
-                    },
-                  ),
-                ],
+                for (final (code, label) in _filters)
+                  filterChip(code, label, allRows),
               ],
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (code, label) in _filters)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: filterChip(code, label, allRows),
+                    ),
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 4),
           if (rows.isEmpty)
             Padding(
@@ -1248,6 +1296,10 @@ class _OrderDetailState extends State<OrderDetail> {
     )) {
       return;
     }
+    final error =
+        quotePriceError('${body['price']}') ??
+        quotePickupError(DateTime.tryParse('${body['pickupAt']}'));
+    if (error != null) throw ApiError(400, error);
     await widget.api.post('$base/$id/quote', body);
   });
 

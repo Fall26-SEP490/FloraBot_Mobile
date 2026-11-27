@@ -10,9 +10,15 @@ import '../ui/team_widgets.dart';
 import '../ui/vietnam_bank_picker.dart';
 
 class PaymentChannelPage extends StatefulWidget {
-  const PaymentChannelPage(this.api, this.session, {super.key});
+  const PaymentChannelPage(
+    this.api,
+    this.session, {
+    this.startWithTransactions = false,
+    super.key,
+  });
   final ApiClient api;
   final Session session;
+  final bool startWithTransactions;
 
   @override
   State<PaymentChannelPage> createState() => _PaymentChannelPageState();
@@ -39,15 +45,12 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
   int _page = 1;
   String _statusFilter = '';
   bool _busy = false;
-  bool _loyaltyForbidden = false;
-  bool _loyaltySaving = false;
   bool _transactionsLoaded = false;
   String? _reconcilingId;
   int _paymentsEpoch = 0;
 
   final _channel = _SectionState<Json?>();
   final _bank = _SectionState<Json>();
-  final _loyalty = _SectionState<Json>();
   final _report = _SectionState<Json>();
   final _payments = _SectionState<Json>();
 
@@ -58,8 +61,9 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _segment = widget.startWithTransactions ? 1 : 0;
     if (_sellerId != null) {
-      unawaited(_loadOverview());
+      unawaited(_refreshActive());
     }
   }
 
@@ -83,8 +87,7 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
   Future<void> _refreshActive() =>
       _segment == 0 ? _loadOverview() : _loadTransactions();
 
-  Future<void> _loadOverview() =>
-      Future.wait([_loadChannel(), _loadBank(), _loadLoyalty()]);
+  Future<void> _loadOverview() => Future.wait([_loadChannel(), _loadBank()]);
 
   Future<void> _loadTransactions() {
     _transactionsLoaded = true;
@@ -140,41 +143,6 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
     } finally {
       if (mounted && epoch == _bank.epoch) {
         setState(() => _bank.loading = false);
-      }
-    }
-  }
-
-  Future<void> _loadLoyalty() async {
-    if (_sellerId == null || _loyaltySaving) return;
-    final epoch = ++_loyalty.epoch;
-    setState(() {
-      _loyalty.loading = true;
-      _loyalty.error = null;
-      _loyaltyForbidden = false;
-    });
-    try {
-      final result = objectOf(await widget.api.get('$_base/loyalty-settings'));
-      if (!mounted || epoch != _loyalty.epoch) return;
-      setState(() {
-        _loyalty.data = result;
-        _loyalty.loaded = true;
-      });
-    } on ApiError catch (e) {
-      if (!mounted || epoch != _loyalty.epoch) return;
-      if (e.status == 403) {
-        setState(() {
-          _loyaltyForbidden = true;
-          _loyalty.loaded = true;
-        });
-      } else {
-        setState(() => _loyalty.error = '$e');
-      }
-    } catch (e) {
-      if (!mounted || epoch != _loyalty.epoch) return;
-      setState(() => _loyalty.error = '$e');
-    } finally {
-      if (mounted && epoch == _loyalty.epoch) {
-        setState(() => _loyalty.loading = false);
       }
     }
   }
@@ -307,43 +275,6 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
     }
   }
 
-  Future<void> _toggleLoyalty(bool next) async {
-    if (_busy || _loyaltySaving) return;
-    setState(() {
-      _loyalty.epoch++;
-      _loyalty.loading = false;
-      _loyaltySaving = true;
-    });
-    var failed = false;
-    try {
-      final updated = objectOf(
-        await widget.api.put('$_base/loyalty-settings', {'enabled': next}),
-      );
-      if (!mounted) return;
-      setState(() {
-        _loyalty.epoch++;
-        _loyalty.data = updated;
-        _loyalty.loaded = true;
-        _loyalty.error = null;
-        _loyaltyForbidden = false;
-      });
-      message(
-        context,
-        updated['enabled'] == true
-            ? 'Đã bật tích điểm cho shop.'
-            : 'Đã tắt tích điểm cho shop.',
-      );
-    } catch (e) {
-      failed = true;
-      if (mounted) message(context, '$e');
-    } finally {
-      if (mounted) {
-        setState(() => _loyaltySaving = false);
-        if (failed) await _loadLoyalty();
-      }
-    }
-  }
-
   Future<void> _reconcilePayment(String paymentId) async {
     if (_busy || _reconcilingId != null) return;
     setState(() => _reconcilingId = paymentId);
@@ -370,7 +301,6 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
       _busy ||
       _channel.loading ||
       _bank.loading ||
-      _loyalty.loading ||
       _report.loading ||
       _payments.loading;
 
@@ -413,6 +343,12 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
               final next = selection.first;
               if (next == _segment) return;
               setState(() => _segment = next);
+              if (next == 0 &&
+                  (!_channel.loaded || !_bank.loaded) &&
+                  !_channel.loading &&
+                  !_bank.loading) {
+                unawaited(_loadOverview());
+              }
               if (next == 1 &&
                   !_transactionsLoaded &&
                   !_report.loading &&
@@ -425,7 +361,6 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
           if (_segment == 0) ...[
             _buildPayOsCard(),
             _buildBankCard(),
-            _buildLoyaltyCard(),
           ] else ...[
             _buildReportCard(),
             _buildPaymentsCard(),
@@ -567,52 +502,6 @@ class _PaymentChannelPageState extends State<PaymentChannelPage>
                   label: Text(
                     needsUpdate ? 'Cập nhật tài khoản' : 'Khai báo tài khoản',
                   ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  Widget _buildLoyaltyCard() {
-    final enabled = _loyalty.data?['enabled'] == true;
-    return _PanelCard(
-      title: 'Tích điểm theo shop',
-      subtitle:
-          'Tích điểm 1% cho đơn đặt trước hoàn tất. Không áp dụng mua trực tiếp tại tủ.',
-      badge: _loyalty.loaded && _loyalty.error == null
-          ? _StatusPill(
-              enabled
-                  ? const _BadgeStyle(
-                      'Đang bật tích điểm',
-                      Color(0xFFE9F5EC),
-                      forest,
-                    )
-                  : const _BadgeStyle(
-                      'Đang tắt tích điểm',
-                      Color(0xFFEEF2EE),
-                      Color(0xFF526458),
-                    ),
-            )
-          : null,
-      loading: _loyalty.loading && !_loyalty.loaded,
-      error: _loyalty.error,
-      onRetry: _loadLoyalty,
-      child: _loyaltyForbidden
-          ? const Text(
-              'Chỉ chủ shop đang hoạt động mới có thể thay đổi cài đặt tích điểm.',
-              style: TextStyle(
-                fontSize: 13,
-                color: Color(0xFF617568),
-                height: 1.45,
-              ),
-            )
-          : Row(
-              children: [
-                const Expanded(child: Text('Cho phép tích điểm')),
-                Switch.adaptive(
-                  value: enabled,
-                  activeTrackColor: forest,
-                  onChanged: (_busy || _loyaltySaving) ? null : _toggleLoyalty,
                 ),
               ],
             ),

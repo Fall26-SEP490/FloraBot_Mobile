@@ -66,6 +66,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Tìm kiosk nhận hoa gần vị trí của bạn khi bạn yêu cầu.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Quét mã QR FloraBot và chụp ảnh bằng chứng công việc, hoa tại kiosk.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

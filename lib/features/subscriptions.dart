@@ -26,21 +26,8 @@ class RentalStatus extends StatelessWidget {
   const RentalStatus(this.status, {super.key});
   final String status;
   @override
-  Widget build(BuildContext context) => Text(
-    rentalLabels[status] ?? status,
-    style: TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w700,
-      color: switch (status) {
-        'CANCELLED' ||
-        'TERMINATED' ||
-        'EXPIRED' ||
-        'PAST_DUE' => const Color(0xFFB42318),
-        'PENDING_PAYMENT' => const Color(0xFF925B0A),
-        _ => forest,
-      },
-    ),
-  );
+  Widget build(BuildContext context) =>
+      StatusChip(status, label: rentalLabels[status] ?? statusText(status));
 }
 
 Future<List<Json>> rentalPeriods(

@@ -1402,7 +1402,7 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.white,
           leading: IconButton(
-            tooltip: 'Đóng yêu cầu báo giá',
+            tooltip: 'Đóng yêu cầu đặt trước',
             onPressed: _busy ? null : _requestClose,
             icon: const Icon(Icons.close),
           ),
@@ -1416,7 +1416,7 @@ class _CustomerPreorderFormPageState extends State<CustomerPreorderFormPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Yêu cầu báo giá',
+                      'Yêu cầu đặt trước',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
