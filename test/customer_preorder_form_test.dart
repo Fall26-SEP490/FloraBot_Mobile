@@ -172,7 +172,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Header & base price
-      expect(find.text('Yêu cầu báo giá'), findsOneWidget);
+      expect(find.text('Yêu cầu đặt trước'), findsOneWidget);
       expect(find.text('Bó hồng pastel · Tiệm Hoa Mùa Xuân'), findsOneWidget);
       expect(find.text('Giá mẫu'), findsOneWidget);
       expect(find.text('250.000 đ'), findsOneWidget);
@@ -329,12 +329,12 @@ void main() {
       await tester.tap(chip);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Đóng yêu cầu báo giá'));
+      await tester.tap(find.byTooltip('Đóng yêu cầu đặt trước'));
       await tester.pumpAndSettle();
       expect(find.text('Đóng form?'), findsOneWidget);
       await tester.tap(find.text('Ở lại'));
       await tester.pumpAndSettle();
-      expect(find.text('Yêu cầu báo giá'), findsOneWidget);
+      expect(find.text('Yêu cầu đặt trước'), findsOneWidget);
 
       // Submitting while slot unavailable stays blocked
       await tester.tap(find.text('Gửi yêu cầu'));

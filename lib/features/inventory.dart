@@ -84,7 +84,7 @@ class _SlotDetailState extends State<SlotDetail> {
           !state.busy &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
           (ModalRoute.of(context)?.isCurrent ?? false)) {
-        unawaited(state.reload());
+        unawaited(state.reload(background: true));
       }
     });
     repairTimer = Timer.periodic(const Duration(seconds: 15), (_) {

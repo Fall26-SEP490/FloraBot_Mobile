@@ -198,7 +198,7 @@ class _ChatsPageState extends State<ChatsPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
-                        Icons.auto_awesome_rounded,
+                        Icons.local_florist_outlined,
                         color: Colors.white,
                         size: 22,
                       ),

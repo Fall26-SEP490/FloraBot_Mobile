@@ -91,6 +91,7 @@ class ApiClient {
     Json? body,
     bool authenticated = true,
     String? idempotencyKey,
+    bool textResponse = false,
   }) async {
     final generation = _generation;
     Future<http.Response> send() => _transport
@@ -122,6 +123,11 @@ class ApiClient {
       }
       if (generation != _generation) {
         throw const ApiError(401, 'Phiên đã thay đổi.');
+      }
+      if (textResponse &&
+          response.statusCode >= 200 &&
+          response.statusCode < 300) {
+        return utf8.decode(response.bodyBytes);
       }
       return decode(response);
     } on TimeoutException {

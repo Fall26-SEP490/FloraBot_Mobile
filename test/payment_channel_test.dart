@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:async';
 
 import 'package:florabot_mobile/core/api.dart';
 import 'package:florabot_mobile/core/models.dart';
@@ -25,26 +24,58 @@ Session _seller() => Session.fromJson({
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
-  testWidgets('late refresh cannot overwrite successful loyalty update', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(400, 1400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final oldRead = Completer<http.Response>();
-    var reads = 0;
+  testWidgets(
+    'revenue shortcut opens transactions and loads settings only when selected',
+    (tester) async {
+      final paths = <String>[];
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient((r) async {
+          paths.add(r.url.path);
+          if (r.url.path.endsWith('/reports/sales')) {
+            return _json({
+              'grossPaid': 120000,
+              'totalRefunded': 20000,
+              'netReceipts': 100000,
+              'paidOrders': 3,
+            });
+          }
+          if (r.url.path.endsWith('/payments')) {
+            return _json({'payments': [], 'totalCount': 0});
+          }
+          if (r.url.path.endsWith('/bank')) return _json({'status': 'MISSING'});
+          return _json({}, 404);
+        }),
+      );
+      addTearDown(api.dispose);
+      await tester.pumpWidget(
+        _host(PaymentChannelPage(api, _seller(), startWithTransactions: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SegmentedButton<int>>(find.byType(SegmentedButton<int>))
+            .selected,
+        {1},
+      );
+      expect(find.text('120.000 đ'), findsOneWidget);
+      expect(paths.any((p) => p.endsWith('/payments')), isTrue);
+      expect(paths.any((p) => p.endsWith('/bank')), isFalse);
+      await tester.tap(find.text('Kênh & tài khoản'));
+      await tester.pumpAndSettle();
+      expect(paths.any((p) => p.endsWith('/payment-channel')), isTrue);
+      expect(paths.any((p) => p.endsWith('/bank')), isTrue);
+      expect(find.text('Khai báo tài khoản'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('payment settings omit loyalty UI and requests', (tester) async {
+    final paths = <String>[];
     final api = ApiClient(
       Uri.parse('https://example.test'),
       transport: MockClient((request) async {
-        if (request.url.path.endsWith('/loyalty-settings')) {
-          if (request.method == 'PUT') {
-            return _json({'enabled': true, 'earnRatePercent': 1.0});
-          }
-          reads++;
-          if (reads == 2) return oldRead.future;
-          return _json({'enabled': false, 'earnRatePercent': 1.0});
-        }
+        paths.add(request.url.path);
         if (request.url.path.endsWith('/bank')) {
           return _json({'status': 'MISSING'});
         }
@@ -54,21 +85,10 @@ void main() {
     addTearDown(api.dispose);
     await tester.pumpWidget(_host(PaymentChannelPage(api, _seller())));
     await tester.pumpAndSettle();
-    final refresh = tester
-        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
-        .onRefresh();
-    await tester.pump();
-    await tester.ensureVisible(find.byType(Switch));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-    oldRead.complete(_json({'enabled': false, 'earnRatePercent': 1.0}));
-    await refresh;
-    await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    expect(find.textContaining('tích điểm'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(paths.any((path) => path.contains('loyalty')), isFalse);
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
     'missing PayOS channel shows unconfigured state without action buttons',
@@ -253,7 +273,8 @@ void main() {
       await tester.ensureVisible(find.text('Tạm dừng nhận thanh toán'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Tạm dừng nhận thanh toán'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('Xác nhận'));
       await tester.pumpAndSettle();
 
@@ -263,7 +284,8 @@ void main() {
       await tester.ensureVisible(find.text('Mở lại kênh thanh toán'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mở lại kênh thanh toán'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('Xác nhận'));
       await tester.pumpAndSettle();
 
@@ -272,49 +294,6 @@ void main() {
       api.dispose();
     },
   );
-
-  testWidgets('seller toggles shop loyalty settings', (tester) async {
-    bool enabled = false;
-    bool? putPayload;
-    final api = ApiClient(
-      Uri.parse('https://example.test'),
-      transport: MockClient((request) async {
-        switch (request.url.path) {
-          case '/api/sellers/shop/payment-channel':
-            return _json({}, 404);
-          case '/api/sellers/shop/bank':
-            return _json({'status': 'MISSING'});
-          case '/api/sellers/shop/loyalty-settings':
-            if (request.method == 'PUT') {
-              final body = jsonDecode(request.body) as Map<String, dynamic>;
-              putPayload = body['enabled'] as bool?;
-              enabled = putPayload ?? false;
-            }
-            return _json({
-              'sellerId': 'shop',
-              'enabled': enabled,
-              'earnRatePercent': 1.0,
-            });
-          default:
-            return _json({}, 404);
-        }
-      }),
-    );
-
-    await tester.pumpWidget(_host(PaymentChannelPage(api, _seller())));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Đang tắt tích điểm'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(0, -300));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-
-    expect(putPayload, isTrue);
-    expect(find.text('Đang bật tích điểm'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    api.dispose();
-  });
 
   testWidgets(
     'transactions tab shows metrics, reconciles PENDING payment, paginates, and filters',

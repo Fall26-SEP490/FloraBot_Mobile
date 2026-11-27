@@ -16,6 +16,106 @@ http.Response json(dynamic value, [int status = 200]) => http.Response(
 );
 
 void main() {
+  testWidgets(
+    'suggested flower opens with back navigation preserving AI draft and results',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var adviceRequests = 0;
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient((request) async {
+          if (request.url.path == '/api/shop/flower-chat') {
+            adviceRequests++;
+            return json({
+              'message': 'Gợi ý cho bạn',
+              'suggestions': [
+                {
+                  'productId': 'rose',
+                  'kioskId': 'kiosk',
+                  'name': 'Hoa tư vấn',
+                  'price': 10000,
+                  'shopName': 'Shop Hoa',
+                },
+              ],
+            });
+          }
+          return json({
+            'items': [
+              for (final name in ['Hoa tư vấn', 'Hoa khác'])
+                {
+                  'productId': name == 'Hoa tư vấn' ? 'rose' : 'other',
+                  'sellerId': 'shop',
+                  'kioskId': 'kiosk',
+                  'name': name,
+                  'price': 10000,
+                  'shopName': 'Shop Hoa',
+                  'kioskName': 'Kiosk A',
+                  'tags': ['flower:rose'],
+                },
+            ],
+            'hasMore': false,
+          });
+        }),
+      );
+      final auth = AuthController(api, MemoryTokenVault())
+        ..loading = false
+        ..session = Session.fromJson({
+          'id': 'customer',
+          'name': 'Khách',
+          'role': 'CUSTOMER',
+        });
+      addTearDown(auth.dispose);
+      addTearDown(api.dispose);
+      await tester.pumpWidget(FloraBotApp(auth: auth));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Hoa');
+      await tester.tap(find.byTooltip('Gợi ý chọn hoa bằng AI'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Tặng sinh nhật mẹ');
+      await tester.tap(find.text('Tìm hoa phù hợp'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Xem mẫu'));
+      await tester.tap(find.text('Xem mẫu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Mẫu hoa gợi ý'), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(
+        find.widgetWithText(CustomerFlowerCard, 'Hoa tư vấn'),
+        findsOneWidget,
+      );
+      expect(find.text('Hoa khác'), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CustomerFlowerCard),
+          matching: find.text('Hoa tư vấn'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Chi tiết mẫu hoa'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Mẫu hoa gợi ý'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Tặng sinh nhật mẹ',
+      );
+      expect(find.text('Gợi ý cho bạn'), findsOneWidget);
+      expect(adviceRequests, 1);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Hoa',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('web catalog filters apply locally across all pages and reset', (
     tester,
   ) async {
@@ -222,7 +322,10 @@ void main() {
           matching: find.widgetWithText(FilledButton, 'Hết hàng'),
         );
         expect(tester.widget<FilledButton>(detailSoldOut).onPressed, isNull);
-        expect(find.widgetWithText(OutlinedButton, 'Nhắn shop'), findsOneWidget);
+        expect(
+          find.widgetWithText(OutlinedButton, 'Nhắn shop'),
+          findsOneWidget,
+        );
         await tester.tap(find.byType(BackButton));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Bó hồng pastel'));
@@ -243,7 +346,7 @@ void main() {
         await tester.ensureVisible(order);
         await tester.tap(order);
         await tester.pumpAndSettle();
-        expect(find.text('Yêu cầu báo giá'), findsOneWidget);
+        expect(find.text('Yêu cầu đặt trước'), findsOneWidget);
         expect(find.text('Chưa cần thanh toán'), findsOneWidget);
         expect(find.text('Gửi yêu cầu'), findsOneWidget);
         expect(find.text('Tủ nhận hoa'), findsOneWidget);

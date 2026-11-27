@@ -38,7 +38,7 @@ void main() {
           .map((e) => e.label)
           .toList();
       expect(labels.contains('Lắp đặt'), role == AppRole.technician);
-      expect(labels.contains('Sức khỏe'), role == AppRole.technician);
+      expect(labels.contains('Thiết bị'), role == AppRole.technician);
       expect(labels.contains('Tủ hoa'), role == AppRole.seller);
       expect(labels.contains('Đơn đặt'), role == AppRole.customer);
       expect(labels.contains('Khám phá'), isFalse);
@@ -126,14 +126,14 @@ void main() {
       });
     await tester.pumpWidget(FloraBotApp(auth: auth));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sức khỏe'));
+    await tester.tap(find.text('Thiết bị'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('K-HCM-12'));
     await tester.pumpAndSettle();
     for (var slot = 1; slot <= 4; slot++) {
       expect(find.text('Ô S0$slot'), findsOneWidget);
     }
-    expect(find.text('LM393 · Phát hiện vật'), findsOneWidget);
+    expect(find.text('Phát hiện vật'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     auth.dispose();
@@ -176,16 +176,18 @@ void main() {
       ),
     );
     expect(reads, 0);
-    await tester.tap(find.text('Sức khỏe thiết bị IoT'));
+    await tester.tap(find.text('Tín hiệu thiết bị'));
     await tester.pumpAndSettle();
-    final timeout = find.textContaining('hết thời gian chờ tín hiệu mở');
+    await tester.tap(find.text('Chi tiết tín hiệu'));
+    await tester.pumpAndSettle();
+    final timeout = find.text('Quá thời gian chờ mở cửa');
     expect(timeout, findsOneWidget);
     final refresh = find.text('Đọc lại tín hiệu');
     await tester.ensureVisible(refresh);
     await tester.tap(refresh);
     await tester.pumpAndSettle();
     expect(timeout, findsNothing);
-    expect(find.text('MC-38 · Chưa xác định'), findsOneWidget);
+    expect(find.text('Chưa xác định'), findsNWidgets(2));
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('login fits a small phone and validates empty inputs', (
@@ -309,7 +311,7 @@ void main() {
 
       // Automatically opens the preorder form for the chosen flower
       expect(auth.session?.role, AppRole.customer);
-      expect(find.text('Yêu cầu báo giá'), findsOneWidget);
+      expect(find.text('Yêu cầu đặt trước'), findsOneWidget);
       expect(find.text('Bó hồng pastel · Shop Hoa'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

@@ -3,6 +3,7 @@ import '../core/models.dart';
 import 'common.dart';
 
 abstract final class BrandImages {
+  static const logo = 'assets/images/flora-rose-logo.webp';
   static const hero = 'assets/images/florabot-hero.webp';
   static const pattern = 'assets/images/florabot-pattern.webp';
   static const process = 'assets/images/florabot-process.png';
@@ -10,46 +11,42 @@ abstract final class BrandImages {
 }
 
 class BrandWordmark extends StatelessWidget {
-  const BrandWordmark({super.key});
+  const BrandWordmark({this.height = 56, super.key});
+  final double height;
   @override
-  Widget build(BuildContext context) => const Row(
-    children: [
-      Icon(Icons.local_florist_rounded, color: forest, size: 30),
-      SizedBox(width: 7),
-      Text(
-        'FloraBot',
-        style: TextStyle(
-          color: forest,
-          fontSize: 27,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -1,
-        ),
-      ),
-    ],
+  Widget build(BuildContext context) => Image.asset(
+    BrandImages.logo,
+    width: height * 163 / 184,
+    height: height,
+    fit: BoxFit.contain,
+    semanticLabel: 'FloraBot',
   );
 }
 
 class FloralBackdrop extends StatelessWidget {
-  const FloralBackdrop({required this.child, super.key});
+  const FloralBackdrop({required this.child, this.decorated = true, super.key});
+  final bool decorated;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      Positioned.fill(
-        child: ExcludeSemantics(
-          child: Opacity(
-            opacity: .045,
-            child: Image.asset(
-              BrandImages.pattern,
-              fit: BoxFit.cover,
-              repeat: ImageRepeat.repeat,
+  Widget build(BuildContext context) => decorated
+      ? Stack(
+          children: [
+            Positioned.fill(
+              child: ExcludeSemantics(
+                child: Opacity(
+                  opacity: .045,
+                  child: Image.asset(
+                    BrandImages.pattern,
+                    fit: BoxFit.cover,
+                    repeat: ImageRepeat.repeat,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
-      child,
-    ],
-  );
+            child,
+          ],
+        )
+      : ColoredBox(color: const Color(0xFFF4F7F4), child: child);
 }
 
 class LoginArtwork extends StatelessWidget {

@@ -48,6 +48,7 @@ void main() {
         final api = ApiClient(
           Uri.parse('https://example.test'),
           transport: MockClient((r) async {
+            if (r.url.path.endsWith('/seasonal-advice')) return json([]);
             if (r.method == 'GET') {
               salesUrl = r.url;
               return json({
@@ -116,6 +117,7 @@ void main() {
     final api = ApiClient(
       Uri.parse('https://example.test'),
       transport: MockClient((r) async {
+        if (r.url.path.endsWith('/seasonal-advice')) return json([]);
         if (r.method == 'GET') {
           return json({'totalInvoices': 0, 'totalUnits': 0, 'products': []});
         }

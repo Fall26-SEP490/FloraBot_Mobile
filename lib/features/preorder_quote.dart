@@ -2,6 +2,24 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
 
+const quoteMinLead = Duration(hours: 1);
+const quoteMaxLead = Duration(days: 30);
+
+String? quotePriceError(String? value) {
+  final amount = int.tryParse(value ?? '');
+  return amount == null || amount < 1000 || amount > 100000000
+      ? 'Giá bó hoa từ 1.000 đến 100.000.000 đồng.'
+      : null;
+}
+
+String? quotePickupError(DateTime? pickup, {DateTime? now}) {
+  if (pickup == null) return 'Chọn lịch nhận hoa.';
+  final delay = pickup.difference(now ?? DateTime.now());
+  if (delay < quoteMinLead) return 'Giờ nhận cần cách hiện tại ít nhất 1 giờ.';
+  if (delay > quoteMaxLead) return 'Lịch nhận không quá 30 ngày.';
+  return null;
+}
+
 class PreorderQuoteEditor extends StatefulWidget {
   const PreorderQuoteEditor({
     required this.order,
@@ -130,17 +148,22 @@ class _PreorderQuoteEditorState extends State<PreorderQuoteEditor> {
                   labelText: 'Giá bó hoa (đồng)',
                 ),
                 onChanged: (_) => setState(() {}),
-                validator: (value) =>
-                    int.tryParse(value ?? '') == null ||
-                        (int.tryParse(value ?? '') ?? 0) <= 0
-                    ? 'Nhập giá bó hoa hợp lệ.'
-                    : null,
+                validator: quotePriceError,
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final value = await widget.chooseTime(pickup);
-                  if (mounted && value != null) setState(() => pickup = value);
+                  try {
+                    final value = await widget.chooseTime(pickup);
+                    if (mounted && value != null) {
+                      setState(() {
+                        pickup = value;
+                        error = quotePickupError(value);
+                      });
+                    }
+                  } catch (e) {
+                    if (mounted) setState(() => error = '$e');
+                  }
                 },
                 icon: const Icon(Icons.schedule, size: 18),
                 label: Text(
@@ -307,11 +330,9 @@ class _PreorderQuoteEditorState extends State<PreorderQuoteEditor> {
                     ? null
                     : () {
                         if (form.currentState?.validate() != true) return;
-                        if (pickup == null ||
-                            !pickup!.isAfter(DateTime.now())) {
-                          setState(
-                            () => error = 'Chọn lịch nhận trong tương lai.',
-                          );
+                        final pickupError = quotePickupError(pickup);
+                        if (pickupError != null) {
+                          setState(() => error = pickupError);
                           return;
                         }
                         Navigator.pop(context, <String, dynamic>{

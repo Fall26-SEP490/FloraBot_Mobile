@@ -9,6 +9,7 @@ import '../core/auth.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
 import 'auth_screens.dart';
+import 'kiosk_application.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage(this.auth, this.session, {super.key});
@@ -303,6 +304,24 @@ class AccountPage extends StatelessWidget {
               ),
             ],
           ),
+          if (session.role == AppRole.customer)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    appBar: AppBar(title: const Text('Thuê kiosk')),
+                    body: KioskApplicationPage(
+                      api,
+                      session,
+                      onActivateShop: auth.logout,
+                    ),
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.storefront_outlined),
+              label: const Text('Thuê kiosk / Mở shop'),
+            ),
           if (session.role == AppRole.customer)
             TextButton(
               onPressed: state.busy

@@ -5,7 +5,7 @@ import '../ui/common.dart';
 import 'account.dart';
 import 'inventory.dart';
 import 'orders.dart';
-import 'seller_tools.dart';
+import 'payment_channel.dart';
 
 bool sellerOrderNeedsAction(Json order) {
   final status = order['orderStatus'] ?? order['state'];
@@ -126,17 +126,21 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
         },
       );
 
-  Widget card(List<Widget> children) => Material(
+  Widget card(List<Widget> children, {VoidCallback? onTap}) => Material(
     color: Colors.white,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
       side: const BorderSide(color: Color(0xFFDDE6DF)),
     ),
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
     ),
   );
@@ -153,7 +157,15 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
           ),
         ),
       ),
-      TextButton(onPressed: onTap, child: Text(action)),
+      Flexible(
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: onTap,
+            child: Text(action, textAlign: TextAlign.end),
+          ),
+        ),
+      ),
     ],
   );
 
@@ -165,11 +177,12 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
   ) => ListTile(
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon, color: forest, size: 21),
-    title: Text(title, style: const TextStyle(fontSize: 14)),
+    title: Text(title, style: const TextStyle(fontSize: 15)),
     subtitle: Text(
       value,
       style: const TextStyle(color: forest, fontWeight: FontWeight.w600),
     ),
+    trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF718478)),
     onTap: onTap,
   );
 
@@ -202,53 +215,75 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
           if (refreshing) const LinearProgressIndicator(),
-          card([
-            heading(
+          card(
+            [
+              const Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Tổng doanh thu',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: forest,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Icon(Icons.chevron_right_rounded, color: forest),
+                ],
+              ),
+              const SizedBox(height: 12),
+              data('total', (value) {
+                final report = objectOf(value);
+                return Text(
+                  report['grossPaid'] == null
+                      ? 'Chưa có số liệu'
+                      : money(report['grossPaid']),
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: forest,
+                  ),
+                );
+              }),
+            ],
+            onTap: () => showPage(
+              context,
               'Tổng doanh thu',
-              'Nhận tiền',
-              () => showPage(
-                context,
-                'Kênh nhận tiền',
-                PaymentChannelPage(widget.api, widget.session),
+              PaymentChannelPage(
+                widget.api,
+                widget.session,
+                startWithTransactions: true,
               ),
             ),
-            data('total', (value) {
-              final report = objectOf(value);
-              return Text(
-                report['grossPaid'] == null
-                    ? 'Chưa có số liệu'
-                    : money(report['grossPaid']),
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: forest,
-                ),
-              );
-            }),
-            const SizedBox(height: 6),
-            const Text(
-              'Thanh toán qua PayOS, chưa trừ hoàn tiền.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF617267)),
-            ),
-            const SizedBox(height: 18),
+          ),
+          const SizedBox(height: 14),
+          card([
             Row(
               children: [
-                TextButton(
+                IconButton(
+                  tooltip: 'Tháng trước',
                   onPressed: () => moveMonth(-1),
-                  child: const Text('Trước'),
+                  icon: const Icon(Icons.chevron_left_rounded),
                 ),
                 Expanded(
                   child: Text(
                     'Tháng ${month.month}/${month.year}',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: forest,
+                    ),
                   ),
                 ),
-                TextButton(
+                IconButton(
+                  tooltip: 'Tháng sau',
                   onPressed: month.year == now.year && month.month == now.month
                       ? null
                       : () => moveMonth(1),
-                  child: const Text('Sau'),
+                  icon: const Icon(Icons.chevron_right_rounded),
                 ),
               ],
             ),
@@ -257,10 +292,6 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
               final kiosks = (report['byKiosk'] as List? ?? [])
                   .map(objectOf)
                   .toList();
-              final amounts = kiosks
-                  .map((row) => num.tryParse('${row['grossPaid']}') ?? 0)
-                  .toList();
-              final peak = amounts.fold<num>(0, (a, b) => a > b ? a : b);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -269,79 +300,69 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
                         ? 'Chưa có số liệu'
                         : money(report['grossPaid']),
                     style: const TextStyle(
-                      fontSize: 23,
+                      fontSize: 26,
                       fontWeight: FontWeight.w700,
                       color: forest,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     '${report['paidOrders'] ?? '—'} đơn đã thanh toán',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: Color(0xFF617267),
                     ),
                   ),
-                  if (kiosks.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 16),
-                      child: Text(
-                        'Chưa có doanh thu theo kiosk trong tháng này.',
+                  const SizedBox(height: 8),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    title: const Text(
+                      'Doanh thu từng kiosk',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: forest,
                       ),
                     ),
-                  for (var i = 0; i < kiosks.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
+                    children: [
+                      if (kiosks.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'Chưa có doanh thu theo kiosk trong tháng này.',
+                          ),
+                        ),
+                      for (final kiosk in kiosks)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: Text(
-                                  valueOf(kiosks[i], 'kioskName', 'Kiosk'),
-                                  style: const TextStyle(fontSize: 12),
+                                  valueOf(kiosk, 'kioskName', 'Kiosk'),
+                                  style: const TextStyle(fontSize: 14),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Text(
-                                money(kiosks[i]['grossPaid']),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  money(kiosk['grossPaid']),
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: forest,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          ExcludeSemantics(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: SizedBox(
-                                height: 6,
-                                child: ColoredBox(
-                                  color: const Color(0xFFEDF3E9),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: FractionallySizedBox(
-                                      widthFactor: peak > 0
-                                          ? (amounts[i] / peak)
-                                                .toDouble()
-                                                .clamp(0, 1)
-                                          : 0,
-                                      child: const ColoredBox(
-                                        color: Color(0xFF799B85),
-                                        child: SizedBox.expand(),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                    ],
+                  ),
                 ],
               );
             }),
@@ -398,7 +419,7 @@ class _SellerOverviewPageState extends State<SellerOverviewPage> {
                   if (page['hasMore'] == true)
                     const Text(
                       'Danh sách chưa tải hết. Mở Tất cả đơn để xem thêm.',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF617267)),
+                      style: TextStyle(fontSize: 14, color: Color(0xFF617267)),
                     ),
                 ],
               );
@@ -513,7 +534,7 @@ class _OrderSummary extends StatelessWidget {
         child: Text(
           text,
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             height: 1.5,
             color: Color(0xFF52685B),
           ),
@@ -550,7 +571,7 @@ class _OrderSummary extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         height: 1.5,
                         fontWeight: FontWeight.w600,
                         color: forest,
@@ -559,12 +580,12 @@ class _OrderSummary extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   SizedBox(
-                    width: 104,
+                    width: 112,
                     child: Text(
                       label,
                       textAlign: TextAlign.right,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         height: 1.5,
                         fontWeight: FontWeight.w700,
                         color: color,
