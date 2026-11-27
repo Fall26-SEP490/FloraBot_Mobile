@@ -178,6 +178,16 @@ void main() {
     expect(body['mode'], 'PREORDER');
     expect(body['budget'], 300000);
     expect(find.text('Chưa có mẫu phù hợp'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, '500000');
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      '500.000',
+    );
+    await tester.ensureVisible(find.text('Tìm hoa phù hợp'));
+    await tester.tap(find.text('Tìm hoa phù hợp'));
+    await tester.pumpAndSettle();
+    expect(jsonDecode(request!.body)['budget'], 500000);
+    expect(tester.takeException(), isNull);
     api.dispose();
   });
   testWidgets('refund without transfer permission offers no mutation action', (

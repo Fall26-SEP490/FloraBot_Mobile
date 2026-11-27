@@ -228,9 +228,15 @@ class CustomerFlowerCard extends StatelessWidget {
 }
 
 class CustomerFlowerDetail extends StatelessWidget {
-  const CustomerFlowerDetail({required this.item, this.onChat, super.key});
+  const CustomerFlowerDetail({
+    required this.item,
+    this.onChat,
+    this.onReviews,
+    super.key,
+  });
   final Json item;
   final VoidCallback? onChat;
+  final VoidCallback? onReviews;
 
   @override
   Widget build(BuildContext context) {
@@ -342,6 +348,12 @@ class CustomerFlowerDetail extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(valueOf(item, 'shopName')),
+            if (onReviews != null)
+              TextButton.icon(
+                onPressed: onReviews,
+                icon: const Icon(Icons.star_outline),
+                label: const Text('Đánh giá khách hàng'),
+              ),
             const SizedBox(height: 6),
             Text(
               '${valueOf(item, 'kioskName')}\n${valueOf(item, 'address')}',

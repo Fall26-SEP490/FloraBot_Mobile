@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'common.dart';
+import '../core/models.dart';
 
 const staffAccountLabels = {
   'ACTIVE': 'Đang hoạt động',
@@ -24,20 +25,10 @@ class TeamStatus extends StatelessWidget {
   const TeamStatus(this.value, {super.key});
   final String value;
   @override
-  Widget build(BuildContext context) => Text(
-    staffAccountLabels[value] ?? teamTaskLabels[value] ?? value,
-    style: TextStyle(
-      fontSize: 12,
-      height: 1.4,
-      fontWeight: FontWeight.w600,
-      color: ['LOCKED', 'DISABLED', 'CANCELLED'].contains(value)
-          ? const Color(0xFFB42318)
-          : value == 'SUBMITTED'
-          ? const Color(0xFF9A6700)
-          : value == 'IN_PROGRESS'
-          ? const Color(0xFF175CD3)
-          : forest,
-    ),
+  Widget build(BuildContext context) => StatusChip(
+    value == 'LOCKED' ? 'DISABLED' : value,
+    label:
+        staffAccountLabels[value] ?? teamTaskLabels[value] ?? statusText(value),
   );
 }
 
@@ -175,8 +166,10 @@ class TeamPaging extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 10),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    child: Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 4,
       children: [
         TextButton(
           onPressed: page > 1 && !busy ? () => onPage(page - 1) : null,

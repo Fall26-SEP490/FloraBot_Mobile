@@ -6,6 +6,7 @@ import '../core/api.dart';
 import '../core/goong.dart';
 import '../core/models.dart';
 import '../ui/common.dart';
+import '../ui/vietnam_bank_picker.dart';
 import '../ui/location_picker.dart';
 import 'inventory.dart' show openPage;
 import 'payment_channel.dart';
@@ -35,9 +36,11 @@ class KioskApplicationPage extends StatefulWidget {
     this.api,
     this.session, {
     this.locationPicker,
+    this.onActivateShop,
     this.placesClient,
     super.key,
   });
+  final Future<void> Function()? onActivateShop;
   final ApiClient api;
   final Session session;
   final Future<KioskLocation?> Function(BuildContext, KioskPoint?, String)?
@@ -50,6 +53,18 @@ class KioskApplicationPage extends StatefulWidget {
 class _KioskApplicationPageState extends State<KioskApplicationPage>
     with WidgetsBindingObserver {
   final address = TextEditingController();
+  final customerFields = {
+    for (final key in [
+      'shopName',
+      'phone',
+      'contactEmail',
+      'bankName',
+      'bankHolder',
+      'bankAccountNumber',
+    ])
+      key: TextEditingController(),
+  };
+  bool get customer => widget.session.role == AppRole.customer;
   final form = GlobalKey<FormState>();
   Json? application, pricing, bank, shop;
   KioskPoint? point;
@@ -78,7 +93,7 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
       pricing?['configured'] == true &&
       unitPrice > 0 &&
       (pricing?['version'] as int? ?? 0) > 0 &&
-      bank?['status'] == 'READY';
+      (customer || bank?['status'] == 'READY');
 
   @override
   void initState() {
@@ -96,7 +111,7 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
           loading ||
           polling ||
           !resumed ||
-          application?['status'] != 'AWAITING_PAYMENT' ||
+          !_inProgress(application) ||
           !(ModalRoute.of(context)?.isCurrent ?? true)) {
         return;
       }
@@ -142,6 +157,10 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
     _searchDebounce?.cancel();
     if (widget.placesClient == null) _places?.dispose();
     address.dispose();
+    for (final controller in customerFields.values) {
+      controller.clear();
+      controller.dispose();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -168,16 +187,19 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
       try {
         final result = await Future.wait([
           api.get('/api/kiosk-packages'),
-          api.get('/api/sellers/${widget.session.sellerId}/bank'),
-          api.get('/api/me/shop'),
+          if (!customer)
+            api.get('/api/sellers/${widget.session.sellerId}/bank'),
+          if (!customer) api.get('/api/me/shop'),
         ]);
         if (!mounted || generation != epoch) return;
         setState(() {
           final nextPricing = objectOf(result[0]);
           if (pricing?['version'] != nextPricing['version']) accepted = false;
           pricing = nextPricing;
-          bank = objectOf(result[1]);
-          shop = objectOf(result[2]);
+          if (!customer) {
+            bank = objectOf(result[1]);
+            shop = objectOf(result[2]);
+          }
           setupError = null;
         });
       } catch (e) {
@@ -250,19 +272,32 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
       return;
     }
     final created = objectOf(
-      await api.post('/api/me/kiosk-applications', {
-        'installationAddress': address.text.trim(),
-        'latitude': point!.latitude,
-        'longitude': point!.longitude,
-        'walkInSlots': walk,
-        'preorderSlots': preorder,
-        'pricingVersion': pricing!['version'],
-      }),
+      await api.post(
+        customer
+            ? '/api/member/kiosk-applications'
+            : '/api/me/kiosk-applications',
+        {
+          if (customer)
+            for (final entry in customerFields.entries)
+              entry.key: entry.value.text.trim(),
+          'installationAddress': address.text.trim(),
+          'latitude': point!.latitude,
+          'longitude': point!.longitude,
+          'walkInSlots': walk,
+          'preorderSlots': preorder,
+          'pricingVersion': pricing!['version'],
+        },
+      ),
     );
     if (mounted) {
       setState(() {
         application = created;
         accepted = false;
+        if (customer) {
+          for (final controller in customerFields.values) {
+            controller.clear();
+          }
+        }
       });
     }
   });
@@ -380,6 +415,11 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
 
   Widget appView(Json app) => card([
     StatusHeading(title: title('Hồ sơ thuê kiosk'), status: status(app)),
+    if (customer && app['status'] == 'ACTIVE' && widget.onActivateShop != null)
+      FilledButton(
+        onPressed: busy ? null : widget.onActivateShop,
+        child: const Text('Đăng nhập lại để vào shop'),
+      ),
     const SizedBox(height: 12),
     Text(
       money(app['annualFee']),
@@ -699,15 +739,68 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
     OutlinedButton.icon(
       onPressed: busy ? null : _openMapPicker,
       icon: Icon(
-        point == null
-            ? Icons.location_on_outlined
-            : Icons.check_circle_outline,
+        point == null ? Icons.location_on_outlined : Icons.check_circle_outline,
         size: 18,
       ),
       label: Text(
         point == null ? 'Chọn vị trí trên bản đồ' : 'Đã ghim vị trí · Chọn lại',
       ),
     ),
+  ]);
+
+  Widget _customerCard() => card([
+    title('Thông tin shop'),
+    for (final entry in const {
+      'shopName': 'Tên shop',
+      'phone': 'Số điện thoại',
+      'contactEmail': 'Email liên hệ',
+      'bankName': 'Ngân hàng nhận hoàn phí',
+      'bankHolder': 'Chủ tài khoản',
+      'bankAccountNumber': 'Số tài khoản',
+    }.entries)
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: TextFormField(
+          controller: customerFields[entry.key],
+          enabled: !busy,
+          readOnly: entry.key == 'bankName',
+          onTap: entry.key != 'bankName'
+              ? null
+              : () async {
+                  final value = await pickVietnamBank(context);
+                  if (mounted && value != null) {
+                    customerFields['bankName']!.text = value;
+                  }
+                },
+          keyboardType: ['phone', 'bankAccountNumber'].contains(entry.key)
+              ? TextInputType.phone
+              : entry.key == 'contactEmail'
+              ? TextInputType.emailAddress
+              : TextInputType.text,
+          decoration: InputDecoration(labelText: entry.value),
+          validator: (value) {
+            final text = (value ?? '').trim();
+            if (text.isEmpty) return 'Nhập ${entry.value.toLowerCase()}.';
+            if (entry.key == 'shopName' &&
+                (text.length < 2 || text.length > 120)) {
+              return 'Tên shop từ 2 đến 120 ký tự.';
+            }
+            if (entry.key == 'contactEmail' &&
+                !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(text)) {
+              return 'Email chưa hợp lệ.';
+            }
+            if (entry.key == 'phone' &&
+                !RegExp(r'^\+?[0-9]{9,15}$').hasMatch(text)) {
+              return 'Số điện thoại chưa hợp lệ.';
+            }
+            if (entry.key == 'bankAccountNumber' &&
+                !RegExp(r'^[0-9]{6,30}$').hasMatch(text)) {
+              return 'Số tài khoản từ 6 đến 30 chữ số.';
+            }
+            return null;
+          },
+        ),
+      ),
   ]);
 
   Widget applicationForm() => Form(
@@ -722,35 +815,38 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
             child: const Text('Tải lại hồ sơ shop'),
           ),
         ],
-        card([
-          title(valueOf(shop ?? {}, 'shopName', widget.session.name)),
-          if (bank?['status'] == 'READY')
-            fact(
-              'Ngân hàng nhận hoàn phí',
-              '${valueOf(bank!, 'bankName')} · ${valueOf(bank!, 'holder')} · ••••${valueOf(bank!, 'accountSuffix', '')}',
-            )
-          else ...[
-            const SizedBox(height: 10),
-            const Text(
-              'Cập nhật ngân hàng nhận hoàn phí trước khi thuê.',
-              style: TextStyle(color: Color(0xFFB42318)),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      await openPage(
-                        context,
-                        'Ngân hàng shop',
-                        PaymentChannelPage(api, widget.session),
-                      );
-                      if (mounted) await refresh();
-                    },
-              child: const Text('Cập nhật ngân hàng shop'),
-            ),
-          ],
-        ]),
+        if (customer)
+          _customerCard()
+        else
+          card([
+            title(valueOf(shop ?? {}, 'shopName', widget.session.name)),
+            if (bank?['status'] == 'READY')
+              fact(
+                'Ngân hàng nhận hoàn phí',
+                '${valueOf(bank!, 'bankName')} · ${valueOf(bank!, 'holder')} · ••••${valueOf(bank!, 'accountSuffix', '')}',
+              )
+            else ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Cập nhật ngân hàng nhận hoàn phí trước khi thuê.',
+                style: TextStyle(color: Color(0xFFB42318)),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        await openPage(
+                          context,
+                          'Ngân hàng shop',
+                          PaymentChannelPage(api, widget.session),
+                        );
+                        if (mounted) await refresh();
+                      },
+                child: const Text('Cập nhật ngân hàng shop'),
+              ),
+            ],
+          ]),
         card([
           title('Chọn số ô'),
           const SizedBox(height: 4),
@@ -855,7 +951,8 @@ class _KioskApplicationPageState extends State<KioskApplicationPage>
               style: const TextStyle(color: Color(0xFFB42318)),
             ),
             OutlinedButton(onPressed: refresh, child: const Text('Tải lại')),
-          ] else if (_inProgress(application))
+          ] else if (_inProgress(application) ||
+              (customer && application?['status'] == 'ACTIVE'))
             appView(application!)
           else
             applicationForm(),

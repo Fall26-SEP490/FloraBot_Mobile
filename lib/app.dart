@@ -133,6 +133,7 @@ class _FloraBotAppState extends State<FloraBotApp> with WidgetsBindingObserver {
         builder: (context, child) => ColoredBox(
           color: paper,
           child: FloralBackdrop(
+            decorated: session == null || session.role == AppRole.customer,
             child: Stack(
               children: [
                 ?child,

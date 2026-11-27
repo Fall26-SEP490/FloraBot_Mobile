@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:share_plus/share_plus.dart';
+import 'seasonal_export.dart';
+import 'seasonal_advice.dart';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -47,7 +51,7 @@ class _InsightsPageState extends State<InsightsPage> {
   late DateTime target = DateTime(to.year, to.month + 1);
   Json? sales, forecast;
   Object? salesError, forecastError;
-  bool salesLoading = true, forecastLoading = false;
+  bool salesLoading = true, forecastLoading = false, exporting = false;
   int salesEpoch = 0, forecastEpoch = 0, tab = 0;
   String get base => '/api/sellers/${widget.session.sellerId}/ai';
 
@@ -274,6 +278,43 @@ class _InsightsPageState extends State<InsightsPage> {
     ),
   );
 
+  Future<void> exportSales() async {
+    if (exporting) return;
+    final start = _date(from), end = _date(to);
+    setState(() => exporting = true);
+    try {
+      final csv =
+          await widget.api.request(
+                'GET',
+                '$base/sales.csv?from=$start&to=$end',
+                textResponse: true,
+              )
+              as String;
+      final Uint8List bytes = seasonalExcel(csv);
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              bytes,
+              mimeType:
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ),
+          ],
+          fileNameOverrides: ['doanh-so-$start-$end.xlsx'],
+          sharePositionOrigin: box == null
+              ? const Rect.fromLTWH(0, 0, 1, 1)
+              : box.localToGlobal(Offset.zero) & box.size,
+        ),
+      );
+    } catch (e) {
+      if (mounted) message(context, '$e');
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
   Widget salesView() {
     if (salesLoading) return loading();
     if (salesError != null) return failure(salesError!, loadSales);
@@ -495,7 +536,23 @@ class _InsightsPageState extends State<InsightsPage> {
           onSelectionChanged: (values) => setState(() => tab = values.first),
         ),
         const SizedBox(height: 14),
-        if (tab == 0) salesView() else forecastView(),
+        if (tab == 0) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: exporting ? null : exportSales,
+              icon: const Icon(Icons.download_outlined),
+              label: Text(exporting ? 'Đang tạo Excel…' : 'Xuất Excel'),
+            ),
+          ),
+          salesView(),
+        ] else ...[
+          forecastView(),
+          SeasonalAdvicePanel(
+            widget.api,
+            '$base/seasonal-advice?year=${target.year}&month=${target.month}&historyFrom=${_date(from)}&historyTo=${_date(to)}',
+          ),
+        ],
       ],
     ),
   );

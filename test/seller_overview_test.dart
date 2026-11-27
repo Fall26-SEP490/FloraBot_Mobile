@@ -8,6 +8,57 @@ import 'package:florabot_mobile/core/models.dart';
 import 'package:florabot_mobile/features/seller_overview.dart';
 
 void main() {
+  testWidgets(
+    'entire revenue card opens payment details and back returns to overview',
+    (tester) async {
+      final paths = <String>[];
+      final api = ApiClient(
+        Uri.parse('https://example.test'),
+        transport: MockClient((request) async {
+          paths.add(request.url.path);
+          final Object data = request.url.path.endsWith('/reports/sales')
+              ? {'grossPaid': 1250000, 'paidOrders': 3, 'byKiosk': []}
+              : request.url.path.endsWith('/payments')
+              ? {'payments': [], 'totalCount': 0}
+              : {'items': [], 'hasMore': false};
+          return http.Response(
+            jsonEncode(data),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }),
+      );
+      addTearDown(api.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SellerOverviewPage(
+              api,
+              Session.fromJson({
+                'id': 'seller',
+                'name': 'Shop',
+                'role': 'SELLER',
+                'sellerId': 'shop',
+              }),
+              (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1.250.000 đ').first);
+      await tester.pumpAndSettle();
+      expect(paths.any((p) => p.endsWith('/payments')), isTrue);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(find.text('Doanh thu bán hoa'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Tổng doanh thu'), findsOneWidget);
+      expect(find.text('Doanh thu từng kiosk'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test(
     'Seller attention matches requested and paid orders, excludes closed orders',
     () {
@@ -31,7 +82,7 @@ void main() {
     },
   );
 
-  for (final width in [360.0, 800.0]) {
+  for (final width in [320.0, 360.0, 800.0]) {
     testWidgets(
       'Seller overview loads real summaries, paginates attention and handles partial failure at $width',
       (tester) async {
@@ -103,6 +154,12 @@ void main() {
         int? destination;
         await tester.pumpWidget(
           MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(width == 320 ? 1.3 : 1)),
+              child: child!,
+            ),
             home: Scaffold(
               body: SellerOverviewPage(
                 api,
@@ -119,8 +176,14 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
         expect(find.text('Tổng doanh thu'), findsOneWidget);
+        expect(find.text('1.250.000 đ'), findsNWidgets(2));
+        await tester.tap(find.text('Doanh thu từng kiosk'));
+        await tester.pumpAndSettle();
         expect(find.text('1.250.000 đ'), findsNWidgets(3));
+        await tester.tap(find.text('Doanh thu từng kiosk'));
+        await tester.pumpAndSettle();
         expect(calls.any((url) => url.endsWith('/preorders?page=2')), isTrue);
         await tester.scrollUntilVisible(find.text('Bó hoa cần nạp'), 300);
         expect(find.textContaining('Cần nạp hoa'), findsOneWidget);
@@ -129,6 +192,7 @@ void main() {
         await tester.tap(find.text('Tất cả đơn'));
         expect(destination, 2);
         await tester.scrollUntilVisible(find.text('Cửa hàng của tôi'), 250);
+        await tester.pumpAndSettle();
         expect(find.text('Chưa tải được dữ liệu.'), findsOneWidget);
         expect(find.text('1/1'), findsOneWidget);
         expect(find.text('1 hội thoại chưa đọc'), findsOneWidget);

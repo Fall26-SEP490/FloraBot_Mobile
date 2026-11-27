@@ -43,24 +43,34 @@ class _KiosksPageState extends State<KiosksPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const PageTitle('Tủ hoa', 'Quản lý kiosk và các ô tủ của shop.'),
+          const PageTitle('Tủ hoa', ''),
+          TextField(
+            style: const TextStyle(fontSize: 16),
+            decoration: const InputDecoration(
+              hintText: 'Tìm tên, mã hoặc địa chỉ kiosk',
+              prefixIcon: Icon(Icons.search_rounded),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 16,
+              ),
+            ),
+            onChanged: (value) => setState(() => search = value),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 44,
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Tìm kiosk...',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: (value) => setState(() => search = value),
+                child: Text(
+                  '${kiosks.length} kiosk',
+                  style: const TextStyle(
+                    color: Color(0xFF617267),
+                    fontSize: 14,
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
               InventoryFilter(
                 value: filter,
+                showLabel: true,
                 options: const {
                   'ALL': 'Tất cả',
                   'ONLINE': 'Trực tuyến',
@@ -106,7 +116,7 @@ class _KiosksPageState extends State<KiosksPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      InventoryStatus(valueOf(kiosk, 'status')),
+                      StatusChip(kiosk['status']),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -115,7 +125,7 @@ class _KiosksPageState extends State<KiosksPage> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       height: 1.5,
                       color: Color(0xFF617267),
                     ),
@@ -128,8 +138,8 @@ class _KiosksPageState extends State<KiosksPage> {
                     children: [
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          minimumSize: const Size(0, 48),
+                          tapTargetSize: MaterialTapTargetSize.padded,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -142,7 +152,7 @@ class _KiosksPageState extends State<KiosksPage> {
                           KioskOverviewPage(widget.api, widget.session, kiosk),
                           state,
                         ),
-                        icon: const Icon(Icons.info_outline, size: 16),
+                        icon: const Icon(Icons.info_outline, size: 18),
                         label: const Text(
                           'Xem kiosk',
                           style: TextStyle(fontSize: 12),
@@ -150,8 +160,8 @@ class _KiosksPageState extends State<KiosksPage> {
                       ),
                       FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          minimumSize: const Size(0, 48),
+                          tapTargetSize: MaterialTapTargetSize.padded,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -164,7 +174,7 @@ class _KiosksPageState extends State<KiosksPage> {
                           SlotsPage(widget.api, widget.session, kiosk),
                           state,
                         ),
-                        icon: const Icon(Icons.grid_view_outlined, size: 16),
+                        icon: const Icon(Icons.grid_view_outlined, size: 18),
                         label: const Text(
                           'Xem ô tủ',
                           style: TextStyle(fontSize: 12),
